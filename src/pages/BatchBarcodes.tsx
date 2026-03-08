@@ -1,0 +1,241 @@
+import { useState, useMemo } from "react";
+import { Download, ChevronDown, Zap, Printer, Loader2 } from "lucide-react";
+import BarcodeGenerator from "react-barcode";
+import jsPDF from "jspdf";
+import { toPng } from "html-to-image";
+
+export function BatchBarcodes() {
+  const [labelsPerPage, setLabelsPerPage] = useState(24);
+  const [pages, setPages] = useState(1);
+  const [showCutLines, setShowCutLines] = useState(false);
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+
+  // Generate random barcodes
+  const barcodes = useMemo(() => {
+    const generateRandomBarcode = () => {
+      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+      let result = '';
+      for (let i = 0; i < 8; i++) {
+        result += chars.charAt(Math.floor(Math.random() * chars.length));
+      }
+      return result;
+    };
+    return Array.from({ length: labelsPerPage * pages }, () => generateRandomBarcode());
+  }, [labelsPerPage, pages]);
+
+  const gridConfig = useMemo(() => {
+    if (labelsPerPage === 40) return { cols: 4, rows: 10, barcodeWidth: 1, barcodeHeight: 25, fontSize: '10px' };
+    if (labelsPerPage === 30) return { cols: 3, rows: 10, barcodeWidth: 1.3, barcodeHeight: 35, fontSize: '11px' };
+    return { cols: 3, rows: 8, barcodeWidth: 1.4, barcodeHeight: 45, fontSize: '12px' }; // 24
+  }, [labelsPerPage]);
+
+  const chunkedBarcodes = useMemo(() => {
+    const chunks = [];
+    for (let i = 0; i < barcodes.length; i += labelsPerPage) {
+      chunks.push(barcodes.slice(i, i + labelsPerPage));
+    }
+    return chunks;
+  }, [barcodes, labelsPerPage]);
+
+  const handlePrint = () => {
+    window.print();
+  };
+
+  const handleDownloadPdf = async () => {
+    setIsGeneratingPdf(true);
+    try {
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      
+      const pagesElements = document.querySelectorAll('.print-page');
+      
+      for (let i = 0; i < pagesElements.length; i++) {
+        const element = pagesElements[i] as HTMLElement;
+        const imgData = await toPng(element, {
+          quality: 1,
+          pixelRatio: 4, // Increased for much higher PDF resolution
+          backgroundColor: '#ffffff'
+        });
+
+        const imgProps = pdf.getImageProperties(imgData);
+        const imgHeight = (imgProps.height * pdfWidth) / imgProps.width;
+
+        if (i > 0) {
+          pdf.addPage();
+        }
+        pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, imgHeight);
+      }
+
+      pdf.save('electrostock-barcodes.pdf');
+    } catch (error) {
+      console.error("Error generating PDF:", error);
+    } finally {
+      setIsGeneratingPdf(false);
+    }
+  };
+
+  return (
+    <main className="flex flex-col lg:flex-row flex-1 overflow-hidden h-[calc(100vh-73px)] print-main">
+      <style>
+        {`
+          @media print {
+            body, html {
+              height: auto !important;
+              overflow: visible !important;
+              background: white !important;
+            }
+            header, aside, .no-print {
+              display: none !important;
+            }
+            .print-main, section, #root, .flex-1 {
+              display: block !important;
+              height: auto !important;
+              overflow: visible !important;
+              padding: 0 !important;
+              margin: 0 !important;
+              background: white !important;
+            }
+            #print-area {
+              width: 100%;
+              background: white !important;
+            }
+            .print-page {
+              page-break-after: always;
+              box-shadow: none !important;
+              border: none !important;
+              margin: 0 !important;
+              padding: 0 !important;
+              min-height: auto !important;
+            }
+            .print-page:last-child {
+              page-break-after: auto;
+            }
+          }
+        `}
+      </style>
+      {/* Left Configuration Panel */}
+      <aside className="w-full lg:w-80 border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-background-dark p-6 overflow-y-auto shrink-0 no-print">
+        <div className="mb-8">
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Batch Labels</h1>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Configure your barcode sheet</p>
+        </div>
+        <div className="space-y-6">
+          {/* Config Item */}
+          <div className="space-y-2">
+            <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Labels Per Page</label>
+            <select 
+              value={labelsPerPage}
+              onChange={(e) => setLabelsPerPage(Number(e.target.value))}
+              className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2.5 text-sm focus:ring-primary"
+            >
+              <option value={24}>24 (3 x 8)</option>
+              <option value={30}>30 (3 x 10)</option>
+              <option value={40}>40 (4 x 10)</option>
+            </select>
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Number of Pages</label>
+            <input 
+              className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 text-sm focus:ring-primary" 
+              min="1" 
+              type="number" 
+              value={pages}
+              onChange={(e) => setPages(Math.max(1, Number(e.target.value)))}
+            />
+          </div>
+          <div className="flex items-center gap-3 pt-2">
+            <input 
+              type="checkbox" 
+              id="cut-lines" 
+              checked={showCutLines}
+              onChange={(e) => setShowCutLines(e.target.checked)}
+              className="w-4 h-4 text-primary bg-slate-50 border-slate-300 rounded focus:ring-primary dark:bg-slate-900 dark:border-slate-700 cursor-pointer"
+            />
+            <label htmlFor="cut-lines" className="text-sm font-semibold text-slate-700 dark:text-slate-300 cursor-pointer select-none">
+              Show Cut Lines (Dashed)
+            </label>
+          </div>
+          {/* Config Item */}
+          <div className="pt-4 space-y-3">
+            <button 
+              onClick={handlePrint}
+              className="w-full bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-900 dark:text-white font-bold py-3 px-4 flex items-center justify-center gap-2 transition-all rounded-full"
+            >
+              <Printer className="w-5 h-5" />
+              Print Labels
+            </button>
+            <button 
+              onClick={handleDownloadPdf}
+              disabled={isGeneratingPdf}
+              className="w-full bg-primary hover:bg-primary/90 text-white font-bold py-3 px-4 flex items-center justify-center gap-2 shadow-lg shadow-primary/20 transition-all rounded-full disabled:opacity-70 disabled:cursor-not-allowed"
+            >
+              {isGeneratingPdf ? <Loader2 className="w-5 h-5 animate-spin" /> : <Download className="w-5 h-5" />}
+              {isGeneratingPdf ? "Generating PDF..." : "Download PDF"}
+            </button>
+          </div>
+        </div>
+      </aside>
+      {/* Main Preview Area */}
+      <section className="flex-1 bg-slate-100 dark:bg-slate-900/50 p-4 lg:p-8 overflow-y-auto">
+        <div className="max-w-4xl mx-auto">
+          <div className="flex items-center justify-between mb-6 no-print">
+            <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200 flex items-center gap-2">
+              <Zap className="w-5 h-5 text-primary" />
+              Print Preview (A4 Sheet)
+            </h3>
+          </div>
+          
+          <div id="print-area" style={{ display: 'flex', flexDirection: 'column', gap: '2rem', alignItems: 'center' }}>
+            {chunkedBarcodes.map((pageBarcodes, pageIndex) => (
+              <div key={pageIndex} className="print-page" style={{ 
+                width: '794px', 
+                height: '1123px', 
+                backgroundColor: '#ffffff', 
+                boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)', 
+                boxSizing: 'border-box',
+                padding: '38px'
+              }}>
+                <div style={{ 
+                  display: 'grid', 
+                  gridTemplateColumns: `repeat(${gridConfig.cols}, 1fr)`, 
+                  gridTemplateRows: `repeat(${gridConfig.rows}, 1fr)`,
+                  gap: '15px',
+                  height: '100%',
+                  width: '100%'
+                }}>
+                  {pageBarcodes.map((barcode, idx) => (
+                    <div key={idx} style={{ 
+                      border: showCutLines ? '1px dashed #94a3b8' : '1px solid #cbd5e1', 
+                      padding: '10px', 
+                      borderRadius: showCutLines ? '0px' : '8px', 
+                      display: 'flex', 
+                      flexDirection: 'column', 
+                      justifyContent: 'center', 
+                      backgroundColor: '#ffffff', 
+                      overflow: 'hidden', 
+                      boxSizing: 'border-box' 
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <Zap size={12} color="#f97316" />
+                          <span style={{ fontSize: '8px', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#94a3b8' }}>ElectroStock</span>
+                        </div>
+                        <span style={{ fontSize: '8px', fontFamily: 'monospace', color: '#64748b' }}>v2.4.0</span>
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flex: 1 }}>
+                        <div style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#ffffff' }}>
+                          <BarcodeGenerator value={barcode} height={gridConfig.barcodeHeight} displayValue={false} background="transparent" width={gridConfig.barcodeWidth} margin={0} />
+                        </div>
+                        <div style={{ textAlign: 'center', fontSize: gridConfig.fontSize, fontFamily: 'monospace', marginTop: '8px', letterSpacing: '0.1em', fontWeight: 'bold', color: '#0f172a' }}>{barcode}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+    </main>
+  );
+}
