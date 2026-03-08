@@ -111,6 +111,7 @@ export function AddComponent() {
   const [formData, setFormData] = useState({
     name: "",
     category: "",
+    subcategory: "",
     pkg: "",
     description: "",
     quantity: 0,
@@ -168,6 +169,7 @@ export function AddComponent() {
         setFormData({
           name: isCloneMode ? `${component.name} (Copy)` : component.name,
           category: typeof component.type === 'object' ? component.type?.id?.toString() || "" : String(component.type || ""),
+          subcategory: component.subcategory || "",
           pkg: typeof component.package === 'object' ? component.package?.id?.toString() || "" : String(component.package || ""),
           description: component.description || "",
           quantity: isCloneMode ? 0 : (component.quantity_available || 0),
@@ -200,7 +202,7 @@ export function AddComponent() {
   }, [id, cloneId, navigate, isCloneMode]);
 
   // Tags State
-  const [tags, setTags] = useState<string[]>(["AVR", "8-BIT"]);
+  const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState("");
 
   // File Upload States
@@ -357,20 +359,40 @@ export function AddComponent() {
     const toastId = toast.loading("AI is researching the component...");
 
     try {
+      // 1. Search for component details using SerpApi
+      const searchResponse = await fetch(`/api/search-images?q=${encodeURIComponent(formData.name)}`);
+      if (!searchResponse.ok) throw new Error("Failed to search component");
+      const searchResults = await searchResponse.json();
+      
+      const context = searchResults.slice(0, 5).map((r: any) => r.title).join("\n");
+
+      // 2. Use Gemini to fill fields
       const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
       const response = await ai.models.generateContent({
-        model: "gemini-3.1-flash-preview",
+        model: "gemini-3-flash-preview",
         contents: `Research the electronic component named "${formData.name}". 
-        Provide technical details for an inventory system.
+        Here is some context from search results: ${context}
+        Available categories: ${categories.map(c => c.name).join(", ")}.
+        Available packages: ${packages.map(p => p.name).join(", ")}.
+        
+        Provide a detailed technical description for an inventory system in Markdown format.
+        Include:
+        - Component description
+        - Pinout information
+        - Key characteristics/specifications
+        
+        Suggest the best-matching category and package from the available lists. 
+        If no existing category/package is suitable, suggest a new one.
+        
         Return the data in JSON format matching the schema.`,
         config: {
           responseMimeType: "application/json",
           responseSchema: {
             type: Type.OBJECT,
             properties: {
-              description: { type: Type.STRING, description: "A concise technical description of the component" },
-              category: { type: Type.STRING, description: "The most likely category name (e.g., Microcontroller, Resistor, Capacitor, IC, Connector)" },
-              package: { type: Type.STRING, description: "The standard package type (e.g., TO-220, SOIC-8, 0805, DIP-28)" },
+              description: { type: Type.STRING, description: "A detailed technical description in Markdown format, including pinout, characteristics, etc." },
+              category: { type: Type.STRING, description: "The best-matching category from the available list or a suggested new one" },
+              package: { type: Type.STRING, description: "The best-matching package from the available list or a suggested new one" },
               keywords: { type: Type.ARRAY, items: { type: Type.STRING }, description: "Relevant technical keywords" },
               packet_reference: { type: Type.STRING, description: "A likely manufacturer part number or reference" }
             },
@@ -520,6 +542,7 @@ export function AddComponent() {
         packet_reference: formData.packetReference || null,
         package: Number(formData.pkg),
         type: Number(formData.category),
+        subcategory: formData.subcategory || null,
         barcode: barcodes.length > 0 ? barcodes.join(';') : null,
       };
 

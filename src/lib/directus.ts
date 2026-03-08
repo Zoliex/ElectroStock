@@ -37,6 +37,7 @@ export interface Component {
   packet_reference: string | null;
   package: number | ComponentPackage; // Package ID or Package object
   type: number | ComponentType; // Type ID or Type object
+  subcategory: string | null; // Added subcategory field
   barcode: string | null;
   other_images?: ComponentFile[];
   other_files?: ComponentFile[];

@@ -11,7 +11,7 @@ async function startServer() {
 
   app.use(express.json());
 
-  // Google Images Scraper Proxy Route
+  // SerpApi Image Search Proxy Route
   app.get("/api/search-images", async (req, res) => {
     const { q } = req.query;
 
@@ -19,72 +19,55 @@ async function startServer() {
       return res.status(400).json({ error: "Query parameter 'q' is required" });
     }
 
+    if (!process.env.SERPAPI_API_KEY) {
+      return res.status(500).json({ error: "SerpApi key not configured" });
+    }
+
     try {
-      // Add a random delay to avoid triggering rate limits
-      await new Promise(resolve => setTimeout(resolve, Math.random() * 2000 + 1000));
-
-      // Use a browser-like User-Agent to get the standard results page
-      const response = await axios.get(`https://www.google.com/search?q=${encodeURIComponent(q as string)}&tbm=isch`, {
-        headers: {
-          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
-          "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
-          "Accept-Language": "en-US,en;q=0.9",
-          "Referer": "https://www.google.com/"
-        }
-      });
-
-      const html = response.data;
-      const matches: { url: string; title: string; source?: string }[] = [];
-      
-      // Look for the JSON data in the script tags
-      // Google often embeds image data in structures like ["http...", height, width]
-      const imgDataRegex = /\["(https?:\/\/[^"]+)",(\d+),(\d+)\]/g;
-      let match;
-      
-      while ((match = imgDataRegex.exec(html)) !== null) {
-        const url = match[1];
-        const height = parseInt(match[2]);
-        const width = parseInt(match[3]);
-
-        // Filter out small icons, tracking pixels, and non-image extensions
-        if (url.includes("gstatic.com") || url.includes("google.com") || url.includes("favicon")) continue;
-        if (height < 100 || width < 100) continue; // Skip very small images
-        
-        // Avoid duplicates
-        if (!matches.some(m => m.url === url)) {
-          matches.push({
-            url: url,
-            title: `Image for ${q} (${width}x${height})`,
-          });
-        }
-        
-        if (matches.length >= 30) break;
-      }
-
-      // Fallback: search for standard img tags if the JSON extraction fails
-      if (matches.length < 5) {
-        const imgTagRegex = /<img[^>]+src="([^">]+)"[^>]*alt="([^">]*)"/g;
-        while ((match = imgTagRegex.exec(html)) !== null) {
-          const url = match[1];
-          const alt = match[2] || `Image for ${q}`;
-          
-          if (url.startsWith("http") && !url.includes("google.com") && !url.includes("gstatic.com")) {
-            if (!matches.some(m => m.url === url)) {
-              matches.push({ url, title: alt });
+      // Try SerpApi first
+      if (process.env.SERPAPI_API_KEY) {
+        try {
+          const response = await axios.get("https://serpapi.com/search.json", {
+            params: {
+              engine: "google_images",
+              q: q,
+              api_key: process.env.SERPAPI_API_KEY
             }
+          });
+
+          if (!response.data.error) {
+            const matches = response.data.images_results.map((result: any) => ({
+              url: result.original,
+              title: result.title
+            }));
+            return res.json(matches);
           }
-          if (matches.length >= 30) break;
+        } catch (serpError: any) {
+          console.error("SerpApi failed, trying Unsplash:", serpError.message);
         }
       }
 
-      res.json(matches);
-    } catch (error: any) {
-      console.error("Scraping Error:", error.message);
-      if (error.response?.status === 429) {
-        res.status(429).json({ error: "Too many requests. Please wait a moment and try again." });
-      } else {
-        res.status(500).json({ error: "Failed to scrape images" });
+      // Fallback to Unsplash
+      if (process.env.UNSPLASH_ACCESS_KEY) {
+        const response = await axios.get("https://api.unsplash.com/search/photos", {
+          params: {
+            query: q,
+            per_page: 10,
+            client_id: process.env.UNSPLASH_ACCESS_KEY
+          }
+        });
+
+        const matches = response.data.results.map((result: any) => ({
+          url: result.urls.regular,
+          title: result.alt_description || "Unsplash Image"
+        }));
+        return res.json(matches);
       }
+
+      throw new Error("No image search provider configured");
+    } catch (error: any) {
+      console.error("Image Search Error:", error.message);
+      res.status(500).json({ error: "Failed to fetch images. Please check your API key configuration." });
     }
   });
 
