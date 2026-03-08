@@ -1,16 +1,38 @@
-import { Bell, Search, Cpu } from "lucide-react";
-import { Link, useLocation } from "react-router-dom";
+import { Search, Cpu } from "lucide-react";
+import { Link, useLocation, useSearchParams, useNavigate } from "react-router-dom";
 import { cn } from "../lib/utils";
 
 export function Header() {
   const location = useLocation();
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const searchQuery = searchParams.get("q") || "";
 
   const navLinks = [
     { name: "Dashboard", path: "/" },
     { name: "Inventory", path: "/inventory" },
     { name: "Categories", path: "/categories" },
+    { name: "Boxes", path: "/boxes" },
     { name: "Barcodes", path: "/barcodes" },
   ];
+
+  const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    
+    // If we are not on the inventory page, redirect there when searching
+    if (location.pathname !== "/inventory" && value) {
+      navigate(`/inventory?q=${encodeURIComponent(value)}`);
+    } else {
+      setSearchParams(prev => {
+        if (value) {
+          prev.set("q", value);
+        } else {
+          prev.delete("q");
+        }
+        return prev;
+      });
+    }
+  };
 
   return (
     <header className="flex items-center justify-between whitespace-nowrap border-b border-slate-200 dark:border-slate-800 px-6 py-4 bg-background-light dark:bg-background-dark sticky top-0 z-50">
@@ -46,21 +68,10 @@ export function Header() {
           <input
             className="form-input w-full rounded-lg border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-900 focus:border-primary focus:ring-1 focus:ring-primary pl-10 pr-4 py-2 text-sm placeholder:text-slate-500"
             placeholder="Search components..."
+            value={searchQuery}
+            onChange={handleSearch}
           />
         </label>
-        <div className="flex items-center gap-3">
-          <button className="p-2 rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors relative">
-            <Bell className="w-5 h-5" />
-            <span className="absolute top-2 right-2 flex h-2 w-2 rounded-full bg-red-500"></span>
-          </button>
-          <div
-            className="h-10 w-10 rounded-full border-2 border-primary/20 bg-cover bg-center"
-            style={{
-              backgroundImage:
-                'url("https://lh3.googleusercontent.com/aida-public/AB6AXuAj-l8xzpGuFT5e-G7bhPAaZRUCLZKHoSE0bK7Ax6Wmc-k-G6Tp2OWVuMtHjI99aiY9rqSLhTbHw9AyrRHyni5h5Gg9XK_4HozvEfkVbggcprnpwQy_2WFyKZcPVixVFRVew-Gf2qZAh6jI5RfDLYzQVyyGJg6U27h9-h5Bv5aMACsb2ZB0sp-SipmLXroxnLh1yr8nv-WxmWZZ0Rp4-aWf4DcnCXZ_nzlmZtRJr5BpOSnwgWzuw8DsqUqEO31LjIvFj_6vY7HX6QOb")',
-            }}
-          ></div>
-        </div>
       </div>
     </header>
   );

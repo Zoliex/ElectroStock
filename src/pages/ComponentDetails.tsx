@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { motion } from "motion/react";
 import {
   Edit2,
   PlusSquare,
@@ -16,38 +17,103 @@ import {
   Trash2,
   Loader2,
   Printer,
-  Zap
+  Zap,
+  X,
+  Check,
+  File,
+  Image as ImageIcon,
+  ExternalLink,
+  Download,
+  Paperclip
 } from "lucide-react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useNavigate } from "react-router-dom";
 import { directus, Component, getFileUrl, ComponentType, Box, ComponentPackage } from "../lib/directus";
-import { readItem } from "@directus/sdk";
+import { readItem, deleteItem, updateItem } from "@directus/sdk";
 import MDEditor from '@uiw/react-md-editor';
 import BarcodeGenerator from "react-barcode";
+import { toast } from "sonner";
 
 export function ComponentDetails() {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const [component, setComponent] = useState<Component | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showStockModal, setShowStockModal] = useState(false);
+  const [stockAdjustment, setStockAdjustment] = useState<number>(0);
+  const [isUpdating, setIsUpdating] = useState(false);
+
+  const fetchComponent = async () => {
+    if (!id) return;
+    try {
+      const fetchedComponent = await directus.request(
+        readItem('components', Number(id), {
+          fields: ['*', 'type.*', 'package.*', 'location.*', 'components_files.*.directus_files_id', 'components_files_1.*.directus_files_id'] as any
+        })
+      );
+      setComponent(fetchedComponent as unknown as Component);
+    } catch (error) {
+      console.error("Error fetching component details:", error);
+      toast.error("Failed to load component details");
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchComponent = async () => {
-      if (!id) return;
-      try {
-        const fetchedComponent = await directus.request(
-          readItem('components', Number(id), {
-            fields: ['*', 'type.*', 'package.*', 'location.*']
-          })
-        );
-        setComponent(fetchedComponent as unknown as Component);
-      } catch (error) {
-        console.error("Error fetching component details:", error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
     fetchComponent();
   }, [id]);
+
+  const handleDelete = async () => {
+    if (!id) return;
+    try {
+      await directus.request(deleteItem('components', Number(id)));
+      toast.success("Component deleted successfully");
+      navigate("/inventory");
+    } catch (error) {
+      console.error("Error deleting component:", error);
+      toast.error("Failed to delete component");
+    }
+  };
+
+  const handleShare = () => {
+    navigator.clipboard.writeText(window.location.href);
+    toast.success("Link copied to clipboard");
+  };
+
+  const handleUpdateStock = async () => {
+    if (!component || !id) return;
+    
+    // If adjustment is 0, do nothing
+    if (stockAdjustment === 0) {
+        setShowStockModal(false);
+        return;
+    }
+
+    const newQuantity = (component.quantity_available || 0) + stockAdjustment;
+    
+    if (newQuantity < 0) {
+        toast.error("Cannot reduce stock below zero");
+        return;
+    }
+
+    setIsUpdating(true);
+    try {
+      await directus.request(updateItem('components', Number(id), {
+        quantity_available: newQuantity
+      }));
+      
+      setComponent(prev => prev ? ({ ...prev, quantity_available: newQuantity }) : null);
+      toast.success("Stock updated successfully");
+      setShowStockModal(false);
+      setStockAdjustment(0);
+    } catch (error) {
+      console.error("Error updating stock:", error);
+      toast.error("Failed to update stock");
+    } finally {
+      setIsUpdating(false);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -78,7 +144,12 @@ export function ComponentDetails() {
   };
 
   return (
-    <main className="flex-1 max-w-7xl mx-auto w-full px-6 py-8">
+    <motion.main 
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5 }}
+      className="flex-1 max-w-7xl mx-auto w-full px-6 py-8 relative"
+    >
       <style>
         {`
           @media print {
@@ -112,7 +183,10 @@ export function ComponentDetails() {
           <Link to={`/inventory/edit/${component.id}`} className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-semibold text-sm hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
             <Edit2 className="w-4 h-4" /> Edit
           </Link>
-          <button className="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-white font-semibold text-sm hover:brightness-110 transition-all shadow-lg shadow-primary/20">
+          <button 
+            onClick={() => setShowStockModal(true)}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-white font-semibold text-sm hover:brightness-110 transition-all shadow-lg shadow-primary/20"
+          >
             <PlusSquare className="w-4 h-4" /> Update Stock
           </button>
         </div>
@@ -123,7 +197,7 @@ export function ComponentDetails() {
           Inventory
         </Link>
         <ChevronRight className="w-4 h-4" />
-        <span className="hover:text-primary cursor-pointer transition-colors">{categoryName}</span>
+        <Link to={`/inventory?category=${(component.type as ComponentType)?.id || ''}`} className="hover:text-primary cursor-pointer transition-colors">{categoryName}</Link>
         <ChevronRight className="w-4 h-4" />
         <span className="text-slate-900 dark:text-slate-100 font-medium">{component.name}</span>
       </nav>
@@ -141,16 +215,16 @@ export function ComponentDetails() {
               />
               <div className="absolute top-4 right-4 flex gap-2">
                 {component.quantity_available > 0 ? (
-                  <span className="px-3 py-1 bg-emerald-500/20 text-emerald-500 text-xs font-bold rounded-full backdrop-blur-md">
+                  <span className="px-3 py-1 bg-emerald-500 text-white text-xs font-bold rounded-full shadow-sm">
                     IN STOCK
                   </span>
                 ) : (
-                  <span className="px-3 py-1 bg-red-500/20 text-red-500 text-xs font-bold rounded-full backdrop-blur-md">
+                  <span className="px-3 py-1 bg-red-500 text-white text-xs font-bold rounded-full shadow-sm">
                     OUT OF STOCK
                   </span>
                 )}
                 {component.keywords && component.keywords.length > 0 && (
-                  <span className="px-3 py-1 bg-primary/20 text-primary text-xs font-bold rounded-full backdrop-blur-md">
+                  <span className="px-3 py-1 bg-primary text-white text-xs font-bold rounded-full shadow-sm">
                     {component.keywords[0]}
                   </span>
                 )}
@@ -226,32 +300,70 @@ export function ComponentDetails() {
               <div className="flex items-start gap-3">
                 <QrCode className="w-5 h-5 text-slate-400 shrink-0" />
                 <div className="w-full">
-                  <p className="text-xs text-slate-500">Barcode</p>
-                  <div className="flex items-center justify-between mt-1 mb-3">
-                    <p className="text-sm font-semibold font-mono">{component.barcode || "N/A"}</p>
-                    {component.barcode && (
-                      <button onClick={handlePrint} className="text-primary text-xs font-bold hover:underline rounded-xl flex items-center gap-1">
-                        <Printer className="w-3 h-3" /> PRINT
-                      </button>
+                  <p className="text-xs text-slate-500">Barcodes</p>
+                  <div className="flex flex-col gap-4 mt-3 mb-3">
+                    {component.barcode ? (
+                      component.barcode.split(';').filter(b => b.trim()).map((code, idx) => (
+                        <div key={idx} className="group relative">
+                          <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col items-center justify-center gap-3 transition-all hover:shadow-md hover:border-primary/50">
+                            <div className="flex justify-between items-start w-full">
+                              <div className="flex items-center gap-1.5">
+                                <Zap className="w-3.5 h-3.5 text-orange-500" />
+                                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">ElectroStock</span>
+                              </div>
+                              <span className="text-[8px] font-mono text-slate-400 dark:text-slate-500">v2.4.0</span>
+                            </div>
+                            
+                            <div className="w-full flex flex-col items-center justify-center bg-white dark:bg-white rounded-lg p-3 border border-slate-100 dark:border-slate-200">
+                              <BarcodeGenerator value={code} height={40} displayValue={false} background="transparent" width={1.5} margin={0} />
+                              <div className="text-center text-[10px] font-mono mt-2 tracking-[0.2em] font-bold text-slate-900">{code}</div>
+                            </div>
+
+                            <button 
+                              onClick={() => {
+                                const style = document.createElement('style');
+                                style.innerHTML = `
+                                  @media print {
+                                    body * { visibility: hidden; }
+                                    #barcode-print-${idx}, #barcode-print-${idx} * { visibility: visible; }
+                                    #barcode-print-${idx} { position: absolute; left: 0; top: 0; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
+                                  }
+                                `;
+                                document.head.appendChild(style);
+                                window.print();
+                                document.head.removeChild(style);
+                              }} 
+                              className="absolute top-2 right-2 p-2 bg-slate-50 dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-400 hover:text-primary hover:border-primary transition-all opacity-0 group-hover:opacity-100 shadow-sm"
+                              title="Print Barcode"
+                            >
+                              <Printer className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-sm font-semibold font-mono text-slate-400">N/A</p>
                     )}
                   </div>
-                  {component.barcode && (
-                    <div id="single-barcode-print" className="border border-slate-300 dark:border-slate-700 p-4 rounded-md flex flex-col justify-center h-32 relative bg-white dark:bg-slate-900 w-[300px]">
-                      <div className="flex justify-between items-start mb-2">
+                  
+                  {/* Hidden print containers for each barcode */}
+                  {component.barcode && component.barcode.split(';').filter(b => b.trim()).map((code, idx) => (
+                    <div key={idx} id={`barcode-print-${idx}`} className="hidden print:flex border border-slate-300 dark:border-slate-700 p-4 rounded-md flex-col justify-center h-32 relative bg-white dark:bg-slate-900 w-[300px]">
+                      <div className="flex justify-between items-start mb-2 w-full">
                         <div className="flex items-center gap-1.5">
                           <Zap className="w-4 h-4 text-primary" />
                           <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">ElectroStock</span>
                         </div>
                         <span className="text-[9px] font-mono text-slate-500">v2.4.0</span>
                       </div>
-                      <div className="flex flex-col items-center justify-center">
+                      <div className="flex flex-col items-center justify-center w-full">
                         <div className="h-10 w-full flex items-center justify-center overflow-hidden bg-white rounded p-1">
-                          <BarcodeGenerator value={component.barcode} height={30} displayValue={false} background="transparent" width={1.5} margin={0} />
+                          <BarcodeGenerator value={code} height={30} displayValue={false} background="transparent" width={1.5} margin={0} />
                         </div>
-                        <div className="text-center text-[10px] font-mono mt-1 tracking-[0.2em] font-bold">{component.barcode}</div>
+                        <div className="text-center text-[10px] font-mono mt-1 tracking-[0.2em] font-bold">{code}</div>
                       </div>
                     </div>
-                  )}
+                  ))}
                 </div>
               </div>
             </div>
@@ -286,28 +398,183 @@ export function ComponentDetails() {
           <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 shadow-sm border border-slate-200 dark:border-slate-800">
             <h3 className="text-lg font-bold mb-4">Quick Actions</h3>
             <div className="grid grid-cols-2 gap-3">
-              <button className="flex flex-col items-center justify-center p-4 rounded-2xl border border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
-                <History className="w-5 h-5 text-slate-400 mb-2" />
-                <span className="text-xs font-bold">History</span>
-              </button>
-              <button className="flex flex-col items-center justify-center p-4 rounded-2xl border border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
+              <Link to={`/inventory/edit/${component.id}`} className="flex flex-col items-center justify-center p-4 rounded-2xl border border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
+                <Edit2 className="w-5 h-5 text-slate-400 mb-2" />
+                <span className="text-xs font-bold">Edit</span>
+              </Link>
+              <button 
+                onClick={handleShare}
+                className="flex flex-col items-center justify-center p-4 rounded-2xl border border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+              >
                 <Share2 className="w-5 h-5 text-slate-400 mb-2" />
                 <span className="text-xs font-bold">Share</span>
               </button>
-              <button className="flex flex-col items-center justify-center p-4 rounded-2xl border border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
+              <button 
+                onClick={() => navigate(`/inventory/add?clone=${component.id}`)}
+                className="flex flex-col items-center justify-center p-4 rounded-2xl border border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+              >
                 <Copy className="w-5 h-5 text-slate-400 mb-2" />
                 <span className="text-xs font-bold">Clone</span>
               </button>
-              <button className="flex flex-col items-center justify-center p-4 rounded-2xl border border-red-500/10 hover:bg-red-500/10 transition-colors group">
+              <button 
+                onClick={() => setShowDeleteModal(true)}
+                className="flex flex-col items-center justify-center p-4 rounded-2xl border border-red-500/10 hover:bg-red-500/10 transition-colors group"
+              >
                 <Trash2 className="w-5 h-5 text-red-500/50 group-hover:text-red-500 mb-2 transition-colors" />
                 <span className="text-xs font-bold text-red-500/50 group-hover:text-red-500 transition-colors">
                   Delete
                 </span>
               </button>
             </div>
+            {/* Additional Assets Section */}
+            {( (component as any).components_files?.length > 0 || (component as any).components_files_1?.length > 0 ) && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                {/* Image Gallery */}
+                {(component as any).components_files?.length > 0 && (
+                  <section className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm">
+                    <h3 className="text-lg font-bold mb-6 flex items-center gap-2">
+                      <ImageIcon className="w-5 h-5 text-primary" />
+                      Image Gallery
+                    </h3>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                      {(component as any).components_files.map((file: any, idx: number) => (
+                        <a 
+                          key={idx} 
+                          href={getFileUrl(file.directus_files_id)} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="aspect-square rounded-xl overflow-hidden border border-slate-100 dark:border-slate-800 hover:border-primary transition-all group"
+                        >
+                          <img 
+                            src={getFileUrl(file.directus_files_id)} 
+                            alt={`Additional ${idx + 1}`}
+                            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                            referrerPolicy="no-referrer"
+                          />
+                        </a>
+                      ))}
+                    </div>
+                  </section>
+                )}
+
+                {/* Attachments */}
+                {(component as any).components_files_1?.length > 0 && (
+                  <section className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm">
+                    <h3 className="text-lg font-bold mb-6 flex items-center gap-2">
+                      <Paperclip className="w-5 h-5 text-primary" />
+                      Attachments
+                    </h3>
+                    <div className="space-y-3">
+                      {(component as any).components_files_1.map((file: any, idx: number) => (
+                        <a 
+                          key={idx} 
+                          href={getFileUrl(file.directus_files_id)} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700 hover:border-primary transition-all group"
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className="size-10 rounded-lg bg-white dark:bg-slate-800 flex items-center justify-center text-slate-400 group-hover:text-primary transition-colors">
+                              <File className="w-5 h-5" />
+                            </div>
+                            <div className="flex flex-col">
+                              <span className="text-sm font-bold text-slate-700 dark:text-slate-200 truncate max-w-[150px]">
+                                Document {idx + 1}
+                              </span>
+                              <span className="text-[10px] font-mono text-slate-400 uppercase tracking-widest">
+                                PDF / DOC
+                              </span>
+                            </div>
+                          </div>
+                          <Download className="w-4 h-4 text-slate-300 group-hover:text-primary transition-colors" />
+                        </a>
+                      ))}
+                    </div>
+                  </section>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>
-    </main>
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm px-4">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 max-w-sm w-full shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+            <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">Delete Component?</h3>
+            <p className="text-slate-500 dark:text-slate-400 text-sm mb-6">
+              Are you sure you want to delete <strong>{component.name}</strong>? This action cannot be undone.
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setShowDeleteModal(false)}
+                className="px-4 py-2 rounded-lg text-sm font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDelete}
+                className="px-4 py-2 rounded-lg text-sm font-bold bg-red-500 text-white hover:bg-red-600 transition-colors shadow-lg shadow-red-500/20"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Stock Update Modal */}
+      {showStockModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm px-4">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 max-w-sm w-full shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex justify-between items-center mb-4">
+                <h3 className="text-xl font-bold text-slate-900 dark:text-white">Update Stock</h3>
+                <button onClick={() => setShowStockModal(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+                    <X className="w-5 h-5" />
+                </button>
+            </div>
+            
+            <div className="flex items-center justify-center gap-4 mb-6">
+                <button 
+                    onClick={() => setStockAdjustment(prev => prev - 1)}
+                    className="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 font-bold text-xl"
+                >
+                    -
+                </button>
+                <div className="flex flex-col items-center w-24">
+                    <span className="text-3xl font-black text-slate-900 dark:text-white">
+                        {(component.quantity_available || 0) + stockAdjustment}
+                    </span>
+                    <span className={`text-xs font-bold ${stockAdjustment > 0 ? 'text-emerald-500' : stockAdjustment < 0 ? 'text-red-500' : 'text-slate-400'}`}>
+                        {stockAdjustment > 0 ? `+${stockAdjustment}` : stockAdjustment}
+                    </span>
+                </div>
+                <button 
+                    onClick={() => setStockAdjustment(prev => prev + 1)}
+                    className="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 font-bold text-xl"
+                >
+                    +
+                </button>
+            </div>
+
+            <div className="flex gap-2 mb-6">
+                <button onClick={() => setStockAdjustment(prev => prev + 5)} className="flex-1 py-1 text-xs font-bold bg-slate-50 dark:bg-slate-800/50 rounded hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500">+5</button>
+                <button onClick={() => setStockAdjustment(prev => prev + 10)} className="flex-1 py-1 text-xs font-bold bg-slate-50 dark:bg-slate-800/50 rounded hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500">+10</button>
+                <button onClick={() => setStockAdjustment(prev => prev - 5)} className="flex-1 py-1 text-xs font-bold bg-slate-50 dark:bg-slate-800/50 rounded hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500">-5</button>
+            </div>
+
+            <button
+              onClick={handleUpdateStock}
+              disabled={isUpdating}
+              className="w-full py-3 rounded-xl text-sm font-bold bg-primary text-white hover:brightness-110 transition-all shadow-lg shadow-primary/20 flex items-center justify-center gap-2"
+            >
+              {isUpdating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+              Confirm Update
+            </button>
+          </div>
+        </div>
+      )}
+    </motion.main>
   );
 }

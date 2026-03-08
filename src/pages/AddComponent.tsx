@@ -11,21 +11,96 @@ import {
   X,
   AlertTriangle,
   UploadCloud,
-  FilePlus
+  FilePlus,
+  Plus,
+  Edit,
+  Loader2,
+  Zap,
+  Sparkles,
+  Search,
+  Globe,
+  ArrowLeft,
+  Save,
+  ChevronDown
 } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import BarcodeGenerator from "react-barcode";
 import MDEditor from '@uiw/react-md-editor';
 import { toast } from "sonner";
-import { directus, Box, ComponentPackage, ComponentType } from "../lib/directus";
-import { readItems, uploadFiles, createItem } from "@directus/sdk";
+import { GoogleGenAI, Type } from "@google/genai";
+import { directus, Box, ComponentPackage, ComponentType, getFileUrl, Component } from "../lib/directus";
+import { readItems, uploadFiles, createItem, readItem, updateItem } from "@directus/sdk";
 
 export function AddComponent() {
   const navigate = useNavigate();
-  const [barcodeValue, setBarcodeValue] = useState("");
+  const { id } = useParams<{ id: string }>();
+  const [searchParams] = useSearchParams();
+  const cloneId = searchParams.get("clone");
+  const isEditMode = !!id;
+  const isCloneMode = !!cloneId;
+  
+  const [barcodes, setBarcodes] = useState<string[]>([]);
+  const [barcodeInput, setBarcodeInput] = useState("");
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [previewMode, setPreviewMode] = useState(false);
+  const [isAiFilling, setIsAiFilling] = useState(false);
+  const [isSearchingImages, setIsSearchingImages] = useState(false);
+  const [searchResults, setSearchResults] = useState<{ url: string; title: string }[]>([]);
+  const [showImageSearchModal, setShowImageSearchModal] = useState<{ type: 'main' | 'additional' | 'datasheet', query: string } | null>(null);
 
+  // Global Barcode Listener for this page
+  useEffect(() => {
+    let buffer = "";
+    let lastKeyTime = Date.now();
+
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      const currentTime = Date.now();
+      const char = e.key;
+
+      if (currentTime - lastKeyTime > 100) {
+        buffer = "";
+      }
+      lastKeyTime = currentTime;
+
+      if (char === "Enter") {
+        if (buffer.length > 2) {
+          const activeTag = document.activeElement?.tagName;
+          // Only add to list if NOT already typing in an input (the input handles itself)
+          if (activeTag !== "INPUT" && activeTag !== "TEXTAREA") {
+            const newBarcode = buffer.trim();
+            if (newBarcode && !barcodes.includes(newBarcode)) {
+              setBarcodes(prev => [...prev, newBarcode]);
+              toast.success(`Barcode added: ${newBarcode}`);
+            }
+          }
+        }
+        buffer = "";
+      } else if (char.length === 1) {
+        buffer += char;
+      }
+    };
+
+    window.addEventListener("keydown", handleGlobalKeyDown);
+    return () => window.removeEventListener("keydown", handleGlobalKeyDown);
+  }, [barcodes]);
+
+  const handleBarcodeKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (barcodeInput.trim()) {
+        const newBarcode = barcodeInput.trim();
+        if (!barcodes.includes(newBarcode)) {
+          setBarcodes([...barcodes, newBarcode]);
+        }
+        setBarcodeInput("");
+      }
+    }
+  };
+
+  const removeBarcode = (codeToRemove: string) => {
+    setBarcodes(barcodes.filter(b => b !== codeToRemove));
+  };
+  
   // Options State
   const [categories, setCategories] = useState<ComponentType[]>([]);
   const [packages, setPackages] = useState<ComponentPackage[]>([]);
@@ -44,6 +119,10 @@ export function AddComponent() {
     referenceUrl: "",
   });
 
+  // Existing Files State (for Edit Mode)
+  const [existingMainImage, setExistingMainImage] = useState<string | null>(null);
+  const [existingDatasheet, setExistingDatasheet] = useState<string | null>(null);
+
   useEffect(() => {
     const fetchOptions = async () => {
       try {
@@ -57,13 +136,15 @@ export function AddComponent() {
         setPackages(fetchedPackages);
         setLocations(fetchedLocations);
 
-        // Set default values if available
-        setFormData(prev => ({
-          ...prev,
-          category: fetchedCategories.length > 0 ? fetchedCategories[0].id.toString() : "",
-          pkg: fetchedPackages.length > 0 ? fetchedPackages[0].id.toString() : "",
-          storageLocation: fetchedLocations.length > 0 ? fetchedLocations[0].id.toString() : "",
-        }));
+        if (!isEditMode && !isCloneMode) {
+          // Set default values only in add mode
+          setFormData(prev => ({
+            ...prev,
+            category: fetchedCategories.length > 0 ? fetchedCategories[0].id.toString() : "",
+            pkg: fetchedPackages.length > 0 ? fetchedPackages[0].id.toString() : "",
+            storageLocation: fetchedLocations.length > 0 ? fetchedLocations[0].id.toString() : "",
+          }));
+        }
       } catch (error) {
         console.error("Error fetching options from Directus:", error);
       } finally {
@@ -72,7 +153,51 @@ export function AddComponent() {
     };
 
     fetchOptions();
-  }, []);
+  }, [isEditMode, isCloneMode]);
+
+  useEffect(() => {
+    const fetchId = id || cloneId;
+    if (!fetchId) return;
+
+    const fetchComponent = async () => {
+      try {
+        const component = await directus.request(readItem('components', Number(fetchId), {
+          fields: ['*', 'type.*', 'package.*', 'location.*'] as any
+        })) as unknown as Component;
+
+        setFormData({
+          name: isCloneMode ? `${component.name} (Copy)` : component.name,
+          category: typeof component.type === 'object' ? component.type?.id?.toString() || "" : String(component.type || ""),
+          pkg: typeof component.package === 'object' ? component.package?.id?.toString() || "" : String(component.package || ""),
+          description: component.description || "",
+          quantity: isCloneMode ? 0 : (component.quantity_available || 0),
+          storageLocation: typeof component.location === 'object' ? component.location?.id?.toString() || "" : String(component.location || ""),
+          packetReference: component.packet_reference || "",
+          referenceUrl: component.url || "",
+        });
+
+        setTags(component.keywords || []);
+        // Don't copy barcode for clones
+        if (!isCloneMode && component.barcode) {
+          setBarcodes(component.barcode.split(';').filter(b => b.trim() !== ""));
+        } else {
+          setBarcodes([]);
+        }
+        
+        // For clones, we can reuse existing images if we want, OR we can force re-upload.
+        // Reusing existing images is better UX.
+        setExistingMainImage(component.main_image as string);
+        setExistingDatasheet(component.datasheet as string);
+
+      } catch (error) {
+        console.error("Error fetching component:", error);
+        toast.error("Failed to load component details");
+        navigate("/inventory");
+      }
+    };
+
+    fetchComponent();
+  }, [id, cloneId, navigate, isCloneMode]);
 
   // Tags State
   const [tags, setTags] = useState<string[]>(["AVR", "8-BIT"]);
@@ -131,29 +256,258 @@ export function AddComponent() {
 
   const [isSaving, setIsSaving] = useState(false);
 
+  // Modal States
+  const [showCategoryModal, setShowCategoryModal] = useState(false);
+  const [showPackageModal, setShowPackageModal] = useState(false);
+  const [editingCategory, setEditingCategory] = useState<ComponentType | null>(null);
+  const [editingPackage, setEditingPackage] = useState<ComponentPackage | null>(null);
+  
+  // Modal Form States
+  const [modalName, setModalName] = useState("");
+  const [modalComments, setModalComments] = useState("");
+  const [isModalSaving, setIsModalSaving] = useState(false);
+
+  const openCategoryModal = (category?: ComponentType) => {
+    if (category) {
+      setEditingCategory(category);
+      setModalName(category.name);
+      setModalComments(category.comments || "");
+    } else {
+      setEditingCategory(null);
+      setModalName("");
+      setModalComments("");
+    }
+    setShowCategoryModal(true);
+  };
+
+  const openPackageModal = (pkg?: ComponentPackage) => {
+    if (pkg) {
+      setEditingPackage(pkg);
+      setModalName(pkg.name);
+    } else {
+      setEditingPackage(null);
+      setModalName("");
+    }
+    setShowPackageModal(true);
+  };
+
+  const handleSaveCategory = async () => {
+    if (!modalName.trim()) return;
+    setIsModalSaving(true);
+    try {
+      if (editingCategory) {
+        await directus.request(updateItem('components_types', editingCategory.id, {
+          name: modalName,
+          comments: modalComments
+        }));
+        setCategories(prev => prev.map(c => c.id === editingCategory.id ? { ...c, name: modalName, comments: modalComments } : c));
+        toast.success("Category updated");
+      } else {
+        const newCat = await directus.request(createItem('components_types', {
+          name: modalName,
+          comments: modalComments
+        }));
+        setCategories(prev => [...prev, newCat as ComponentType]);
+        setFormData(prev => ({ ...prev, category: String(newCat.id) }));
+        toast.success("Category created");
+      }
+      setShowCategoryModal(false);
+    } catch (e) {
+      console.error(e);
+      toast.error("Failed to save category");
+    } finally {
+      setIsModalSaving(false);
+    }
+  };
+
+  const handleSavePackage = async () => {
+    if (!modalName.trim()) return;
+    setIsModalSaving(true);
+    try {
+      if (editingPackage) {
+        await directus.request(updateItem('components_packages', editingPackage.id, {
+          name: modalName
+        }));
+        setPackages(prev => prev.map(p => p.id === editingPackage.id ? { ...p, name: modalName } : p));
+        toast.success("Package updated");
+      } else {
+        const newPkg = await directus.request(createItem('components_packages', {
+          name: modalName
+        }));
+        setPackages(prev => [...prev, newPkg as ComponentPackage]);
+        setFormData(prev => ({ ...prev, pkg: String(newPkg.id) }));
+        toast.success("Package created");
+      }
+      setShowPackageModal(false);
+    } catch (e) {
+      console.error(e);
+      toast.error("Failed to save package");
+    } finally {
+      setIsModalSaving(false);
+    }
+  };
+
+  const handleAiFill = async () => {
+    if (!formData.name.trim()) {
+      toast.error("Please enter a component name first");
+      return;
+    }
+
+    setIsAiFilling(true);
+    const toastId = toast.loading("AI is researching the component...");
+
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
+      const response = await ai.models.generateContent({
+        model: "gemini-3.1-flash-preview",
+        contents: `Research the electronic component named "${formData.name}". 
+        Provide technical details for an inventory system.
+        Return the data in JSON format matching the schema.`,
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              description: { type: Type.STRING, description: "A concise technical description of the component" },
+              category: { type: Type.STRING, description: "The most likely category name (e.g., Microcontroller, Resistor, Capacitor, IC, Connector)" },
+              package: { type: Type.STRING, description: "The standard package type (e.g., TO-220, SOIC-8, 0805, DIP-28)" },
+              keywords: { type: Type.ARRAY, items: { type: Type.STRING }, description: "Relevant technical keywords" },
+              packet_reference: { type: Type.STRING, description: "A likely manufacturer part number or reference" }
+            },
+            required: ["description", "category", "package", "keywords"]
+          }
+        }
+      });
+
+      const data = JSON.parse(response.text || "{}");
+      
+      // Try to match category and package from existing options
+      const matchedCategory = categories.find(c => 
+        c.name.toLowerCase().includes(data.category.toLowerCase()) || 
+        data.category.toLowerCase().includes(c.name.toLowerCase())
+      );
+      
+      const matchedPackage = packages.find(p => 
+        p.name.toLowerCase().includes(data.package.toLowerCase()) || 
+        data.package.toLowerCase().includes(p.name.toLowerCase())
+      );
+
+      setFormData(prev => ({
+        ...prev,
+        description: data.description || prev.description,
+        category: matchedCategory ? matchedCategory.id.toString() : prev.category,
+        pkg: matchedPackage ? matchedPackage.id.toString() : prev.pkg,
+        packetReference: data.packet_reference || prev.packetReference
+      }));
+
+      if (data.keywords && Array.isArray(data.keywords)) {
+        setTags(prev => Array.from(new Set([...prev, ...data.keywords])));
+      }
+
+      toast.success(
+        <div className="flex flex-col gap-2">
+          <p>AI has filled the fields!</p>
+          <button 
+            onClick={() => setShowImageSearchModal({ type: 'main', query: formData.name })}
+            className="text-[10px] font-bold uppercase tracking-wider bg-primary text-white px-2 py-1 rounded hover:bg-primary/90 transition-colors w-fit"
+          >
+            Search for images now
+          </button>
+        </div>,
+        { id: toastId, duration: 5000 }
+      );
+    } catch (error) {
+      console.error("AI Fill Error:", error);
+      toast.error("AI failed to research the component", { id: toastId });
+    } finally {
+      setIsAiFilling(false);
+    }
+  };
+
+  const handleSearchImages = async (query: string) => {
+    if (!query.trim()) return;
+
+    setIsSearchingImages(true);
+    setSearchResults([]);
+    try {
+      const response = await fetch(`/api/search-images?q=${encodeURIComponent(query)}`);
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to fetch images");
+      }
+      
+      const results = await response.json();
+      if (results && results.length > 0) {
+        setSearchResults(results);
+      } else {
+        toast.info("No images found for this search");
+      }
+    } catch (error: any) {
+      console.error("Image Search Error:", error);
+      toast.error(error.message || "Failed to search for images");
+    } finally {
+      setIsSearchingImages(false);
+    }
+  };
+
+  const selectWebImage = async (url: string) => {
+    if (!showImageSearchModal) return;
+    
+    const toastId = toast.loading("Downloading image...");
+    try {
+      const response = await fetch(url);
+      const blob = await response.blob();
+      const file = new File([blob], "web-image.jpg", { type: blob.type });
+      
+      if (showImageSearchModal.type === 'main') {
+        setMainImage(file);
+      } else if (showImageSearchModal.type === 'datasheet') {
+        setDatasheet(file);
+      } else {
+        setAdditionalImages(prev => [...prev, file]);
+      }
+      
+      setShowImageSearchModal(null);
+      toast.success("Image added!", { id: toastId });
+    } catch (error) {
+      console.error("Image Download Error:", error);
+      toast.error("Failed to download image. It might be protected.", { id: toastId });
+    }
+  };
+
   const handleSave = async () => {
-    if (!formData.name || !formData.category || !formData.description || tags.length === 0 || !formData.storageLocation || !mainImage || !datasheet) {
+    // Validation
+    const hasMainImage = mainImage || existingMainImage;
+    const hasDatasheet = datasheet || existingDatasheet;
+
+    if (!formData.name || !formData.category || !formData.description || tags.length === 0 || !formData.storageLocation || !hasMainImage || !hasDatasheet) {
       toast.error("Please fill in all required fields (Name, Category, Description, Keywords, Storage Location, Main Image, Datasheet).");
       return;
     }
 
     setIsSaving(true);
-    const toastId = toast.loading("Saving component...");
+    const toastId = toast.loading(isEditMode ? "Updating component..." : "Saving component...");
     try {
-      // 1. Upload Main Image
-      const mainImageFormData = new FormData();
-      mainImageFormData.append('file', mainImage);
-      const mainImageRes = await directus.request(uploadFiles(mainImageFormData));
-      // uploadFiles returns the file object directly
-      const mainImageId = (mainImageRes as any).id;
+      let mainImageId = existingMainImage;
+      let datasheetId = existingDatasheet;
 
-      // 2. Upload Datasheet
-      const datasheetFormData = new FormData();
-      datasheetFormData.append('file', datasheet);
-      const datasheetRes = await directus.request(uploadFiles(datasheetFormData));
-      const datasheetId = (datasheetRes as any).id;
+      // 1. Upload Main Image if new one selected
+      if (mainImage) {
+        const mainImageFormData = new FormData();
+        mainImageFormData.append('file', mainImage);
+        const mainImageRes = await directus.request(uploadFiles(mainImageFormData));
+        mainImageId = (mainImageRes as any).id;
+      }
 
-      // 3. Create Component
+      // 2. Upload Datasheet if new one selected
+      if (datasheet) {
+        const datasheetFormData = new FormData();
+        datasheetFormData.append('file', datasheet);
+        const datasheetRes = await directus.request(uploadFiles(datasheetFormData));
+        datasheetId = (datasheetRes as any).id;
+      }
+
+      // 3. Create or Update Component
       const componentData = {
         name: formData.name,
         description: formData.description,
@@ -166,14 +520,20 @@ export function AddComponent() {
         packet_reference: formData.packetReference || null,
         package: Number(formData.pkg),
         type: Number(formData.category),
-        barcode: barcodeValue || null,
+        barcode: barcodes.length > 0 ? barcodes.join(';') : null,
       };
 
-      const newComponentRes = await directus.request(createItem('components', componentData));
-      const componentId = (newComponentRes as any).id;
+      let componentId = id ? Number(id) : null;
+
+      if (isEditMode && id) {
+        await directus.request(updateItem('components', Number(id), componentData));
+      } else {
+        const newComponentRes = await directus.request(createItem('components', componentData));
+        componentId = (newComponentRes as any).id;
+      }
 
       // 4. Upload Additional Images & Create Relations
-      if (additionalImages.length > 0) {
+      if (additionalImages.length > 0 && componentId) {
         for (const file of additionalImages) {
           const fileData = new FormData();
           fileData.append('file', file);
@@ -187,7 +547,7 @@ export function AddComponent() {
       }
 
       // 5. Upload Additional Files & Create Relations
-      if (additionalFiles.length > 0) {
+      if (additionalFiles.length > 0 && componentId) {
         for (const file of additionalFiles) {
           const fileData = new FormData();
           fileData.append('file', file);
@@ -200,7 +560,7 @@ export function AddComponent() {
         }
       }
 
-      toast.success("Component saved successfully!", { id: toastId });
+      toast.success(isEditMode ? "Component updated successfully!" : "Component saved successfully!", { id: toastId });
       navigate("/inventory");
     } catch (error) {
       console.error("Error saving component:", error);
@@ -219,24 +579,24 @@ export function AddComponent() {
           {/* Page Header */}
           <div className="flex flex-wrap justify-between items-end gap-4 mb-8">
             <div className="flex flex-col gap-1">
-              <h1 className="text-slate-900 dark:text-white text-3xl font-extrabold tracking-tight">Add Component</h1>
+              <h1 className="text-slate-900 dark:text-white text-3xl font-extrabold tracking-tight">{isEditMode ? "Edit Component" : "Add Component"}</h1>
               <p className="text-slate-500 dark:text-slate-400 text-base">
-                Enter the technical and logistical specifications for the new component.
+                {isEditMode ? "Update the technical and logistical specifications." : "Enter the technical and logistical specifications for the new component."}
               </p>
             </div>
             <div className="flex gap-3">
               <button
                 onClick={() => setShowCancelModal(true)}
-                className="flex min-w-[100px] cursor-pointer items-center justify-center rounded-lg h-10 px-5 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-sm font-bold hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                className="flex min-w-[100px] cursor-pointer items-center justify-center rounded-xl h-10 px-5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-sm font-semibold hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
               >
                 Cancel
               </button>
               <button 
                 onClick={handleSave}
                 disabled={isSaving}
-                className="flex min-w-[140px] cursor-pointer items-center justify-center rounded-lg h-10 px-5 bg-primary text-white text-sm font-bold shadow-lg shadow-primary/20 hover:brightness-110 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex min-w-[140px] cursor-pointer items-center justify-center rounded-xl h-10 px-5 bg-primary text-white text-sm font-semibold shadow-lg shadow-primary/20 hover:brightness-110 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {isSaving ? "Saving..." : "Save Component"}
+                {isSaving ? (isEditMode ? "Updating..." : "Saving...") : (isEditMode ? "Update Component" : "Save Component")}
               </button>
             </div>
           </div>
@@ -252,7 +612,17 @@ export function AddComponent() {
                 </div>
                 <div className="space-y-6">
                   <div className="flex flex-col gap-2">
-                    <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Name <span className="text-red-500">*</span></label>
+                    <div className="flex justify-between items-center">
+                      <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Name <span className="text-red-500">*</span></label>
+                      <button 
+                        onClick={handleAiFill}
+                        disabled={isAiFilling || !formData.name.trim()}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-primary/10 text-primary hover:bg-primary hover:text-white transition-all disabled:opacity-50 disabled:hover:bg-primary/10 disabled:hover:text-primary group"
+                      >
+                        {isAiFilling ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5 group-hover:animate-pulse" />}
+                        <span className="text-[11px] font-bold uppercase tracking-wider">Fill with AI</span>
+                      </button>
+                    </div>
                     <input
                       name="name"
                       value={formData.name}
@@ -264,39 +634,84 @@ export function AddComponent() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="flex flex-col gap-2">
                       <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Category <span className="text-red-500">*</span></label>
-                      <select 
-                        name="category"
-                        value={formData.category}
-                        onChange={handleInputChange}
-                        disabled={isLoadingOptions}
-                        className={`form-select w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white h-12 px-4 text-base ${focusClasses}`}
-                      >
-                        {isLoadingOptions ? (
-                          <option>Loading...</option>
-                        ) : (
-                          categories.map(cat => (
-                            <option key={cat.id} value={cat.id}>{cat.name}</option>
-                          ))
-                        )}
-                      </select>
+                      <div className="flex gap-2">
+                        <select 
+                          name="category"
+                          value={formData.category}
+                          onChange={handleInputChange}
+                          disabled={isLoadingOptions}
+                          className={`form-select w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white h-12 px-4 text-base ${focusClasses}`}
+                        >
+                          {isLoadingOptions ? (
+                            <option>Loading...</option>
+                          ) : (
+                            categories.map(cat => (
+                              <option key={cat.id} value={cat.id}>{cat.name}</option>
+                            ))
+                          )}
+                        </select>
+                        <button 
+                          onClick={() => openCategoryModal()} 
+                          className="flex items-center justify-center w-12 h-12 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-primary hover:text-white hover:border-primary transition-colors shrink-0"
+                          title="Create New Category"
+                        >
+                          <Plus className="w-5 h-5" />
+                        </button>
+                        <button 
+                          onClick={() => {
+                            const selected = categories.find(c => c.id === Number(formData.category));
+                            if (selected) openCategoryModal(selected);
+                          }} 
+                          disabled={!formData.category}
+                          className="flex items-center justify-center w-12 h-12 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-primary hover:text-white hover:border-primary transition-colors shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
+                          title="Edit Selected Category"
+                        >
+                          <Edit className="w-5 h-5" />
+                        </button>
+                      </div>
+                      {formData.category && categories.find(c => c.id === Number(formData.category))?.comments && (
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 italic">
+                          {categories.find(c => c.id === Number(formData.category))?.comments}
+                        </p>
+                      )}
                     </div>
                     <div className="flex flex-col gap-2">
                       <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Package</label>
-                      <select 
-                        name="pkg"
-                        value={formData.pkg}
-                        onChange={handleInputChange}
-                        disabled={isLoadingOptions}
-                        className={`form-select w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white h-12 px-4 text-base ${focusClasses}`}
-                      >
-                        {isLoadingOptions ? (
-                          <option>Loading...</option>
-                        ) : (
-                          packages.map(p => (
-                            <option key={p.id} value={p.id}>{p.name}</option>
-                          ))
-                        )}
-                      </select>
+                      <div className="flex gap-2">
+                        <select 
+                          name="pkg"
+                          value={formData.pkg}
+                          onChange={handleInputChange}
+                          disabled={isLoadingOptions}
+                          className={`form-select w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white h-12 px-4 text-base ${focusClasses}`}
+                        >
+                          {isLoadingOptions ? (
+                            <option>Loading...</option>
+                          ) : (
+                            packages.map(p => (
+                              <option key={p.id} value={p.id}>{p.name}</option>
+                            ))
+                          )}
+                        </select>
+                        <button 
+                          onClick={() => openPackageModal()} 
+                          className="flex items-center justify-center w-12 h-12 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-primary hover:text-white hover:border-primary transition-colors shrink-0"
+                          title="Create New Package"
+                        >
+                          <Plus className="w-5 h-5" />
+                        </button>
+                        <button 
+                          onClick={() => {
+                            const selected = packages.find(p => p.id === Number(formData.pkg));
+                            if (selected) openPackageModal(selected);
+                          }} 
+                          disabled={!formData.pkg}
+                          className="flex items-center justify-center w-12 h-12 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-primary hover:text-white hover:border-primary transition-colors shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
+                          title="Edit Selected Package"
+                        >
+                          <Edit className="w-5 h-5" />
+                        </button>
+                      </div>
                     </div>
                   </div>
                   <div className="flex flex-col gap-2">
@@ -370,7 +785,16 @@ export function AddComponent() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
                   {/* Main Image */}
                   <div className="flex flex-col gap-2">
-                    <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Main Image <span className="text-red-500">*</span></label>
+                    <div className="flex justify-between items-center">
+                      <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Main Image <span className="text-red-500">*</span></label>
+                      <button 
+                        onClick={() => setShowImageSearchModal({ type: 'main', query: formData.name })}
+                        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-primary hover:text-white transition-all border border-slate-200 dark:border-slate-700 hover:border-primary"
+                      >
+                        <Globe className="w-3.5 h-3.5" />
+                        <span className="text-[10px] font-bold uppercase tracking-wider">Search Web</span>
+                      </button>
+                    </div>
                     <div 
                       onClick={() => mainImageRef.current?.click()}
                       className="flex flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 p-6 hover:border-primary hover:bg-primary/5 transition-all group cursor-pointer min-h-[140px]"
@@ -383,6 +807,16 @@ export function AddComponent() {
                             className="w-full h-32 object-contain rounded-lg mb-2" 
                           />
                           <p className="text-sm font-bold text-center truncate w-full px-4">{mainImage.name}</p>
+                          <p className="text-xs opacity-70 mt-1">Click to replace</p>
+                        </div>
+                      ) : existingMainImage ? (
+                        <div className="flex flex-col items-center text-primary w-full">
+                          <img 
+                            src={getFileUrl(existingMainImage)} 
+                            alt="Existing Main" 
+                            className="w-full h-32 object-contain rounded-lg mb-2" 
+                          />
+                          <p className="text-sm font-bold text-center truncate w-full px-4">Current Image</p>
                           <p className="text-xs opacity-70 mt-1">Click to replace</p>
                         </div>
                       ) : (
@@ -400,7 +834,16 @@ export function AddComponent() {
 
                   {/* Main Datasheet */}
                   <div className="flex flex-col gap-2">
-                    <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Datasheet (PDF/Image) <span className="text-red-500">*</span></label>
+                    <div className="flex justify-between items-center">
+                      <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Datasheet (PDF/Image) <span className="text-red-500">*</span></label>
+                      <button 
+                        onClick={() => setShowImageSearchModal({ type: 'datasheet', query: `${formData.name} datasheet` })}
+                        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-primary hover:text-white transition-all border border-slate-200 dark:border-slate-700 hover:border-primary"
+                      >
+                        <Globe className="w-3.5 h-3.5" />
+                        <span className="text-[10px] font-bold uppercase tracking-wider">Search Web</span>
+                      </button>
+                    </div>
                     <div 
                       onClick={() => datasheetRef.current?.click()}
                       className="flex flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 p-6 hover:border-primary hover:bg-primary/5 transition-all group cursor-pointer min-h-[140px]"
@@ -423,6 +866,14 @@ export function AddComponent() {
                           <p className="text-sm font-bold text-center truncate w-full px-4">{datasheet.name}</p>
                           <p className="text-xs opacity-70 mt-1">Click to replace</p>
                         </div>
+                      ) : existingDatasheet ? (
+                         <div className="flex flex-col items-center text-primary w-full">
+                            <div className="flex flex-col items-center justify-center w-full h-32 bg-slate-100 dark:bg-slate-800 rounded-lg mb-2 border border-slate-200 dark:border-slate-700">
+                              <FileText className="w-10 h-10 text-slate-500 mb-2" />
+                              <span className="text-xs font-bold text-slate-600 dark:text-slate-400">Current Datasheet</span>
+                            </div>
+                            <p className="text-xs opacity-70 mt-1">Click to replace</p>
+                         </div>
                       ) : (
                         <>
                           <FileText className="w-8 h-8 text-slate-400 group-hover:text-primary transition-colors" />
@@ -583,24 +1034,59 @@ export function AddComponent() {
                     />
                   </div>
                   <div className="pt-4 border-t border-slate-200 dark:border-slate-800">
-                    <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Barcode / SKU</label>
+                    <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Barcodes / SKUs</label>
                     <div className="mt-2 flex flex-col gap-4">
-                      <div className="relative">
-                        <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400">
-                          <Barcode className="w-5 h-5" />
-                        </span>
-                        <input
-                          className={`form-input w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white h-12 pl-10 pr-4 text-base ${focusClasses}`}
-                          placeholder="Scan or enter barcode"
-                          type="text"
-                          value={barcodeValue}
-                          onChange={(e) => setBarcodeValue(e.target.value)}
-                        />
+                      <div className="flex flex-wrap gap-2 p-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 focus-within:border-primary focus-within:ring-4 focus-within:ring-primary/20 transition-all">
+                        {barcodes.map((code) => (
+                          <span key={code} className="inline-flex items-center gap-1 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 px-2 py-1 rounded-md text-xs font-mono font-bold tracking-wider border border-slate-200 dark:border-slate-600">
+                            {code}
+                            <button onClick={() => removeBarcode(code)} className="hover:bg-red-100 dark:hover:bg-red-900/30 hover:text-red-500 rounded-full p-0.5 transition-colors">
+                              <X className="w-3 h-3" />
+                            </button>
+                          </span>
+                        ))}
+                        <div className="relative flex-1 min-w-[150px]">
+                          <span className="absolute inset-y-0 left-0 pl-1 flex items-center text-slate-400">
+                            <Barcode className="w-4 h-4" />
+                          </span>
+                          <input
+                            className="w-full bg-transparent border-none focus:ring-0 text-sm h-8 pl-7 outline-none font-mono"
+                            placeholder="Scan or enter barcode..."
+                            type="text"
+                            value={barcodeInput}
+                            onChange={(e) => setBarcodeInput(e.target.value)}
+                            onKeyDown={handleBarcodeKeyDown}
+                          />
+                        </div>
                       </div>
-                      <div className="bg-slate-100 dark:bg-slate-800 rounded-lg p-4 flex flex-col items-center justify-center gap-2 border border-slate-200 dark:border-slate-700 min-h-[120px] overflow-hidden">
-                        {barcodeValue ? (
-                          <div className="bg-white p-2 rounded flex items-center justify-center w-full overflow-hidden">
-                            <BarcodeGenerator value={barcodeValue} height={50} displayValue={false} background="transparent" />
+                      <div className="bg-slate-50 dark:bg-slate-900/50 rounded-xl p-6 flex flex-col items-center justify-center gap-4 border border-slate-200 dark:border-slate-800 min-h-[160px] overflow-hidden">
+                        {barcodes.length > 0 ? (
+                          <div className="flex flex-col gap-4 w-full">
+                            {barcodes.map((code) => (
+                              <div key={code} className="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col items-center justify-center gap-3 transition-all hover:shadow-md group relative">
+                                <div className="flex justify-between items-start w-full">
+                                  <div className="flex items-center gap-1.5">
+                                    <Zap className="w-3.5 h-3.5 text-orange-500" />
+                                    <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">ElectroStock</span>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-[8px] font-mono text-slate-400 dark:text-slate-500">v2.4.0</span>
+                                    <button 
+                                      onClick={() => removeBarcode(code)}
+                                      className="text-slate-400 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
+                                      title="Remove Barcode"
+                                    >
+                                      <X className="w-3 h-3" />
+                                    </button>
+                                  </div>
+                                </div>
+                                
+                                <div className="w-full flex flex-col items-center justify-center bg-white dark:bg-white rounded-lg p-3 border border-slate-100 dark:border-slate-200">
+                                  <BarcodeGenerator value={code} height={40} displayValue={false} background="transparent" width={1.5} margin={0} />
+                                  <div className="text-center text-[10px] font-mono mt-2 tracking-[0.2em] font-bold text-slate-900">{code}</div>
+                                </div>
+                              </div>
+                            ))}
                           </div>
                         ) : (
                           <>
@@ -608,7 +1094,7 @@ export function AddComponent() {
                               <Barcode className="w-8 h-8 text-slate-300" />
                             </div>
                             <p className="text-[10px] text-slate-400 font-mono uppercase tracking-widest">
-                              No barcode generated
+                              No barcodes added
                             </p>
                           </>
                         )}
@@ -624,14 +1110,14 @@ export function AddComponent() {
           <div className="mt-12 flex justify-end gap-4 pb-12 border-t border-slate-200 dark:border-slate-800 pt-8 lg:hidden">
             <button
               onClick={() => setShowCancelModal(true)}
-              className="flex-1 cursor-pointer items-center justify-center rounded-lg h-12 px-5 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-base font-bold flex"
+              className="flex-1 cursor-pointer items-center justify-center rounded-xl h-12 px-5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-base font-semibold flex"
             >
               Cancel
             </button>
             <button 
               onClick={handleSave}
               disabled={isSaving}
-              className="flex-[2] cursor-pointer items-center justify-center rounded-lg h-12 px-5 bg-primary text-white text-base font-bold shadow-lg shadow-primary/20 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex-[2] cursor-pointer items-center justify-center rounded-xl h-12 px-5 bg-primary text-white text-base font-semibold shadow-lg shadow-primary/20 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isSaving ? "Saving..." : "Save Component"}
             </button>
@@ -655,16 +1141,175 @@ export function AddComponent() {
             <div className="flex gap-3 justify-end">
               <button
                 onClick={() => setShowCancelModal(false)}
-                className="px-4 py-2 rounded-lg text-sm font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                className="px-4 py-2 rounded-xl text-sm font-semibold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
               >
                 Keep Editing
               </button>
               <button
                 onClick={() => navigate("/inventory")}
-                className="px-4 py-2 rounded-lg text-sm font-bold bg-red-500 text-white hover:bg-red-600 transition-colors shadow-lg shadow-red-500/20"
+                className="px-4 py-2 rounded-xl text-sm font-semibold bg-red-500 text-white hover:bg-red-600 transition-colors shadow-lg shadow-red-500/20"
               >
                 Discard
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Category Modal */}
+      {showCategoryModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm px-4">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 max-w-sm w-full shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+            <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-4">
+              {editingCategory ? "Edit Category" : "New Category"}
+            </h3>
+            <div className="flex flex-col gap-4">
+              <div className="flex flex-col gap-2">
+                <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Name <span className="text-red-500">*</span></label>
+                <input
+                  value={modalName}
+                  onChange={(e) => setModalName(e.target.value)}
+                  className={`form-input w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white h-10 px-3 text-sm ${focusClasses}`}
+                  placeholder="e.g. Microcontrollers"
+                />
+              </div>
+              <div className="flex flex-col gap-2">
+                <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Comments</label>
+                <textarea
+                  value={modalComments}
+                  onChange={(e) => setModalComments(e.target.value)}
+                  className={`form-input w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white p-3 text-sm min-h-[80px] resize-none ${focusClasses}`}
+                  placeholder="Optional description..."
+                />
+              </div>
+            </div>
+            <div className="flex gap-3 justify-end mt-6">
+              <button
+                onClick={() => setShowCategoryModal(false)}
+                className="px-4 py-2 rounded-xl text-sm font-semibold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveCategory}
+                disabled={isModalSaving || !modalName.trim()}
+                className="px-4 py-2 rounded-xl text-sm font-semibold bg-primary text-white hover:brightness-110 transition-all shadow-lg shadow-primary/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                {isModalSaving && <Loader2 className="w-4 h-4 animate-spin" />}
+                {editingCategory ? "Update" : "Create"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Package Modal */}
+      {showPackageModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm px-4">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 max-w-sm w-full shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+            <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-4">
+              {editingPackage ? "Edit Package" : "New Package"}
+            </h3>
+            <div className="flex flex-col gap-4">
+              <div className="flex flex-col gap-2">
+                <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Name <span className="text-red-500">*</span></label>
+                <input
+                  value={modalName}
+                  onChange={(e) => setModalName(e.target.value)}
+                  className={`form-input w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white h-10 px-3 text-sm ${focusClasses}`}
+                  placeholder="e.g. DIP-28"
+                />
+              </div>
+            </div>
+            <div className="flex gap-3 justify-end mt-6">
+              <button
+                onClick={() => setShowPackageModal(false)}
+                className="px-4 py-2 rounded-xl text-sm font-semibold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSavePackage}
+                disabled={isModalSaving || !modalName.trim()}
+                className="px-4 py-2 rounded-xl text-sm font-semibold bg-primary text-white hover:brightness-110 transition-all shadow-lg shadow-primary/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                {isModalSaving && <Loader2 className="w-4 h-4 animate-spin" />}
+                {editingPackage ? "Update" : "Create"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Image Search Modal */}
+      {showImageSearchModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm px-4">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 max-w-2xl w-full shadow-2xl animate-in fade-in zoom-in-95 duration-200 flex flex-col max-h-[80vh]">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <Globe className="w-5 h-5 text-primary" />
+                Search Web Images
+              </h3>
+              <button onClick={() => setShowImageSearchModal(null)} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="flex gap-2 mb-6">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <input 
+                  defaultValue={showImageSearchModal.query}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleSearchImages(e.currentTarget.value);
+                  }}
+                  placeholder="Search for images..."
+                  className="w-full pl-9 pr-4 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
+                />
+              </div>
+              <button 
+                onClick={() => {
+                  const input = document.querySelector('input[placeholder="Search for images..."]') as HTMLInputElement;
+                  handleSearchImages(input.value);
+                }}
+                disabled={isSearchingImages}
+                className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-bold hover:brightness-110 transition-all disabled:opacity-50"
+              >
+                {isSearchingImages ? <Loader2 className="w-4 h-4 animate-spin" /> : "Search"}
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto pr-2">
+              {isSearchingImages ? (
+                <div className="flex flex-col items-center justify-center py-12 text-slate-400">
+                  <Loader2 className="w-8 h-8 animate-spin mb-4" />
+                  <p>Searching the web...</p>
+                </div>
+              ) : searchResults.length > 0 ? (
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                  {searchResults.map((result, idx) => (
+                    <div 
+                      key={idx} 
+                      onClick={() => selectWebImage(result.url)}
+                      className="group relative aspect-square rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800 cursor-pointer hover:border-primary transition-all"
+                    >
+                      <img 
+                        src={result.url} 
+                        alt={result.title} 
+                        referrerPolicy="no-referrer"
+                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" 
+                      />
+                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                        <span className="text-white text-[10px] font-bold uppercase tracking-widest bg-primary px-2 py-1 rounded">Select</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center py-12 text-slate-400">
+                  <ImageIcon className="w-12 h-12 mb-4 opacity-20" />
+                  <p>Enter a search term to find images</p>
+                </div>
+              )}
             </div>
           </div>
         </div>

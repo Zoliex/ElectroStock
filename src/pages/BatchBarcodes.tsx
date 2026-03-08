@@ -1,27 +1,116 @@
-import { useState, useMemo } from "react";
-import { Download, ChevronDown, Zap, Printer, Loader2 } from "lucide-react";
+import { useState, useEffect, useMemo, useCallback } from "react";
+import { motion } from "motion/react";
+import { Download, ChevronDown, Zap, Printer, Loader2, RefreshCw } from "lucide-react";
 import BarcodeGenerator from "react-barcode";
 import jsPDF from "jspdf";
-import { toPng } from "html-to-image";
+import { toPng, toJpeg } from "html-to-image";
+import { directus } from "../lib/directus";
+import { readItems } from "@directus/sdk";
+import { toast } from "sonner";
 
 export function BatchBarcodes() {
   const [labelsPerPage, setLabelsPerPage] = useState(24);
   const [pages, setPages] = useState(1);
   const [showCutLines, setShowCutLines] = useState(false);
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+  const [barcodes, setBarcodes] = useState<string[]>([]);
+  const [isCheckingDuplicates, setIsCheckingDuplicates] = useState(false);
 
-  // Generate random barcodes
-  const barcodes = useMemo(() => {
-    const generateRandomBarcode = () => {
-      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-      let result = '';
-      for (let i = 0; i < 8; i++) {
-        result += chars.charAt(Math.floor(Math.random() * chars.length));
+  const generateRandomBarcode = () => {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    let result = '';
+    for (let i = 0; i < 8; i++) {
+      result += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return result;
+  };
+
+  const generateAndCheckBarcodes = useCallback(async () => {
+    setIsCheckingDuplicates(true);
+    const totalLabels = labelsPerPage * pages;
+    let currentBarcodes = Array.from({ length: totalLabels }, () => generateRandomBarcode());
+    let hasDuplicates = true;
+    let attempts = 0;
+    const maxAttempts = 5;
+
+    while (hasDuplicates && attempts < maxAttempts) {
+      attempts++;
+      try {
+        // 1. Fix internal duplicates first
+        const seen = new Set<string>();
+        let hasInternalDuplicates = false;
+        
+        // Check for internal duplicates
+        const uniqueSet = new Set(currentBarcodes);
+        if (uniqueSet.size !== currentBarcodes.length) {
+            hasInternalDuplicates = true;
+            currentBarcodes = currentBarcodes.map(code => {
+                let newCode = code;
+                while (seen.has(newCode)) {
+                    newCode = generateRandomBarcode();
+                }
+                seen.add(newCode);
+                return newCode;
+            });
+        }
+
+        // 2. Check against DB
+        // Since barcodes can now be multiple (separated by ;), we need to fetch all existing barcodes
+        // and check if any of our generated ones exist within them.
+        const existingItems = await directus.request(readItems('components', {
+          filter: {
+            barcode: {
+              _nnull: true
+            }
+          },
+          fields: ['barcode'],
+          limit: -1
+        }));
+
+        const allDbBarcodes = new Set<string>();
+        existingItems.forEach((item: any) => {
+            if (item.barcode) {
+                const codes = item.barcode.split(';').map((b: string) => b.trim());
+                codes.forEach((c: string) => allDbBarcodes.add(c));
+            }
+        });
+
+        const existingBarcodes = new Set<string>();
+        currentBarcodes.forEach(code => {
+            if (allDbBarcodes.has(code)) {
+                existingBarcodes.add(code);
+            }
+        });
+
+        if (existingBarcodes.size === 0 && !hasInternalDuplicates) {
+          hasDuplicates = false;
+        } else {
+          hasDuplicates = true;
+          // Regenerate only DB duplicates
+          if (existingBarcodes.size > 0) {
+            currentBarcodes = currentBarcodes.map(code => 
+                existingBarcodes.has(code) ? generateRandomBarcode() : code
+            );
+          }
+        }
+      } catch (error) {
+        console.error("Error checking duplicates:", error);
+        toast.error("Failed to check barcode duplicates");
+        break; // Stop trying on error
       }
-      return result;
-    };
-    return Array.from({ length: labelsPerPage * pages }, () => generateRandomBarcode());
+    }
+
+    if (attempts >= maxAttempts) {
+      toast.warning("Could not guarantee unique barcodes after multiple attempts.");
+    }
+
+    setBarcodes(currentBarcodes);
+    setIsCheckingDuplicates(false);
   }, [labelsPerPage, pages]);
+
+  useEffect(() => {
+    generateAndCheckBarcodes();
+  }, [generateAndCheckBarcodes]);
 
   const gridConfig = useMemo(() => {
     if (labelsPerPage === 40) return { cols: 4, rows: 10, barcodeWidth: 1, barcodeHeight: 25, fontSize: '10px' };
@@ -51,9 +140,9 @@ export function BatchBarcodes() {
       
       for (let i = 0; i < pagesElements.length; i++) {
         const element = pagesElements[i] as HTMLElement;
-        const imgData = await toPng(element, {
-          quality: 1,
-          pixelRatio: 4, // Increased for much higher PDF resolution
+        const imgData = await toJpeg(element, {
+          quality: 0.8,
+          pixelRatio: 2, // Reduced for smaller file size
           backgroundColor: '#ffffff'
         });
 
@@ -63,7 +152,7 @@ export function BatchBarcodes() {
         if (i > 0) {
           pdf.addPage();
         }
-        pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, imgHeight);
+        pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, imgHeight);
       }
 
       pdf.save('electrostock-barcodes.pdf');
@@ -75,7 +164,12 @@ export function BatchBarcodes() {
   };
 
   return (
-    <main className="flex flex-col lg:flex-row flex-1 overflow-hidden h-[calc(100vh-73px)] print-main">
+    <motion.main 
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5 }}
+      className="flex flex-col lg:flex-row flex-1 overflow-hidden h-[calc(100vh-73px)] print-main"
+    >
       <style>
         {`
           @media print {
@@ -158,6 +252,14 @@ export function BatchBarcodes() {
           {/* Config Item */}
           <div className="pt-4 space-y-3">
             <button 
+              onClick={generateAndCheckBarcodes}
+              disabled={isCheckingDuplicates}
+              className="w-full bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white font-bold py-3 px-4 flex items-center justify-center gap-2 transition-all rounded-full disabled:opacity-70"
+            >
+              {isCheckingDuplicates ? <Loader2 className="w-5 h-5 animate-spin" /> : <RefreshCw className="w-5 h-5" />}
+              {isCheckingDuplicates ? "Checking..." : "Regenerate Labels"}
+            </button>
+            <button 
               onClick={handlePrint}
               className="w-full bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-900 dark:text-white font-bold py-3 px-4 flex items-center justify-center gap-2 transition-all rounded-full"
             >
@@ -199,13 +301,13 @@ export function BatchBarcodes() {
                   display: 'grid', 
                   gridTemplateColumns: `repeat(${gridConfig.cols}, 1fr)`, 
                   gridTemplateRows: `repeat(${gridConfig.rows}, 1fr)`,
-                  gap: '15px',
+                  gap: showCutLines ? '0px' : '15px',
                   height: '100%',
                   width: '100%'
                 }}>
                   {pageBarcodes.map((barcode, idx) => (
                     <div key={idx} style={{ 
-                      border: showCutLines ? '1px dashed #94a3b8' : '1px solid #cbd5e1', 
+                      border: showCutLines ? '0.5px dashed #94a3b8' : '1px solid #cbd5e1', 
                       padding: '10px', 
                       borderRadius: showCutLines ? '0px' : '8px', 
                       display: 'flex', 
@@ -213,7 +315,8 @@ export function BatchBarcodes() {
                       justifyContent: 'center', 
                       backgroundColor: '#ffffff', 
                       overflow: 'hidden', 
-                      boxSizing: 'border-box' 
+                      boxSizing: 'border-box',
+                      margin: showCutLines ? '-0.25px' : '0px' // Slight negative margin to overlap borders perfectly
                     }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
@@ -236,6 +339,6 @@ export function BatchBarcodes() {
           </div>
         </div>
       </section>
-    </main>
+    </motion.main>
   );
 }

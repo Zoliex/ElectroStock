@@ -40,6 +40,7 @@ export interface Component {
   barcode: string | null;
   other_images?: ComponentFile[];
   other_files?: ComponentFile[];
+  date_created?: string;
 }
 
 export interface Schema {
