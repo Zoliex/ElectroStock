@@ -21,7 +21,8 @@ import {
   Globe,
   ArrowLeft,
   Save,
-  ChevronDown
+  ChevronDown,
+  Camera
 } from "lucide-react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import BarcodeGenerator from "react-barcode";
@@ -30,6 +31,7 @@ import { toast } from "sonner";
 import { GoogleGenAI, Type } from "@google/genai";
 import { directus, Box, ComponentPackage, ComponentType, getFileUrl, Component } from "../lib/directus";
 import { readItems, uploadFiles, createItem, readItem, updateItem } from "@directus/sdk";
+import { BarcodeScanner } from "../components/BarcodeScanner";
 
 export function AddComponent() {
   const navigate = useNavigate();
@@ -41,7 +43,9 @@ export function AddComponent() {
   
   const [barcodes, setBarcodes] = useState<string[]>([]);
   const [barcodeInput, setBarcodeInput] = useState("");
+  const [showScanner, setShowScanner] = useState(false);
   const [showCancelModal, setShowCancelModal] = useState(false);
+  const [aiProposal, setAiProposal] = useState<{ category?: string, subcategory?: string, package?: string } | null>(null);
   const [previewMode, setPreviewMode] = useState(false);
   const [isAiFilling, setIsAiFilling] = useState(false);
   const [isSearchingImages, setIsSearchingImages] = useState(false);
@@ -295,6 +299,16 @@ export function AddComponent() {
 
   const handleSaveCategory = async () => {
     if (!modalName.trim()) return;
+    
+    // Check for duplicates
+    if (!editingCategory) {
+      const exists = categories.some(c => c.name.toLowerCase() === modalName.trim().toLowerCase());
+      if (exists) {
+        toast.error("A category with this name already exists");
+        return;
+      }
+    }
+
     setIsModalSaving(true);
     try {
       if (editingCategory) {
@@ -367,11 +381,14 @@ export function AddComponent() {
       const context = searchResults.slice(0, 5).map((r: any) => r.title).join("\n");
 
       // 2. Use Gemini to fill fields
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
       const response = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
         contents: `Research the electronic component named "${formData.name}". 
         Here is some context from search results: ${context}
+        
+        CRITICAL INSTRUCTION FOR CATEGORIES AND PACKAGES:
+        You MUST choose from the following existing categories and packages if they are even remotely similar. DO NOT suggest new ones unless absolutely no existing option fits.
         Available categories: ${categories.map(c => c.name).join(", ")}.
         Available packages: ${packages.map(p => p.name).join(", ")}.
         
@@ -381,9 +398,6 @@ export function AddComponent() {
         - Pinout information
         - Key characteristics/specifications
         
-        Suggest the best-matching category and package from the available lists. 
-        If no existing category/package is suitable, suggest a new one.
-        
         Return the data in JSON format matching the schema.`,
         config: {
           responseMimeType: "application/json",
@@ -392,6 +406,7 @@ export function AddComponent() {
             properties: {
               description: { type: Type.STRING, description: "A detailed technical description in Markdown format, including pinout, characteristics, etc." },
               category: { type: Type.STRING, description: "The best-matching category from the available list or a suggested new one" },
+              subcategory: { type: Type.STRING, description: "The best-matching subcategory or a suggested new one" },
               package: { type: Type.STRING, description: "The best-matching package from the available list or a suggested new one" },
               keywords: { type: Type.ARRAY, items: { type: Type.STRING }, description: "Relevant technical keywords" },
               packet_reference: { type: Type.STRING, description: "A likely manufacturer part number or reference" }
@@ -414,10 +429,25 @@ export function AddComponent() {
         data.package.toLowerCase().includes(p.name.toLowerCase())
       );
 
+      let proposedCategory: string | undefined;
+      let proposedSubcategory: string | undefined;
+      let proposedPackage: string | undefined;
+
+      if (!matchedCategory && data.category) {
+        proposedCategory = data.category;
+      }
+      if (data.subcategory) {
+        proposedSubcategory = data.subcategory;
+      }
+      if (!matchedPackage && data.package) {
+        proposedPackage = data.package;
+      }
+
       setFormData(prev => ({
         ...prev,
         description: data.description || prev.description,
         category: matchedCategory ? matchedCategory.id.toString() : prev.category,
+        subcategory: !proposedSubcategory ? data.subcategory : prev.subcategory,
         pkg: matchedPackage ? matchedPackage.id.toString() : prev.pkg,
         packetReference: data.packet_reference || prev.packetReference
       }));
@@ -426,18 +456,22 @@ export function AddComponent() {
         setTags(prev => Array.from(new Set([...prev, ...data.keywords])));
       }
 
-      toast.success(
-        <div className="flex flex-col gap-2">
-          <p>AI has filled the fields!</p>
-          <button 
-            onClick={() => setShowImageSearchModal({ type: 'main', query: formData.name })}
-            className="text-[10px] font-bold uppercase tracking-wider bg-primary text-white px-2 py-1 rounded hover:bg-primary/90 transition-colors w-fit"
-          >
-            Search for images now
-          </button>
-        </div>,
-        { id: toastId, duration: 5000 }
-      );
+      if (proposedCategory || proposedSubcategory || proposedPackage) {
+        setAiProposal({ category: proposedCategory, subcategory: proposedSubcategory, package: proposedPackage });
+      } else {
+        toast.success(
+          <div className="flex flex-col gap-2">
+            <p>AI has filled the fields!</p>
+            <button 
+              onClick={() => setShowImageSearchModal({ type: 'main', query: formData.name })}
+              className="text-[10px] font-bold uppercase tracking-wider bg-primary text-white px-2 py-1 rounded hover:bg-primary/90 transition-colors w-fit"
+            >
+              Search for images now
+            </button>
+          </div>,
+          { id: toastId, duration: 5000 }
+        );
+      }
     } catch (error) {
       console.error("AI Fill Error:", error);
       toast.error("AI failed to research the component", { id: toastId });
@@ -499,11 +533,8 @@ export function AddComponent() {
 
   const handleSave = async () => {
     // Validation
-    const hasMainImage = mainImage || existingMainImage;
-    const hasDatasheet = datasheet || existingDatasheet;
-
-    if (!formData.name || !formData.category || !formData.description || tags.length === 0 || !formData.storageLocation || !hasMainImage || !hasDatasheet) {
-      toast.error("Please fill in all required fields (Name, Category, Description, Keywords, Storage Location, Main Image, Datasheet).");
+    if (!formData.name || !formData.category || !formData.description || tags.length === 0 || !formData.storageLocation) {
+      toast.error("Please fill in all required fields (Name, Category, Description, Keywords, Storage Location).");
       return;
     }
 
@@ -669,7 +700,9 @@ export function AddComponent() {
                             <option>Loading...</option>
                           ) : (
                             categories.map(cat => (
-                              <option key={cat.id} value={cat.id}>{cat.name}</option>
+                              <option key={cat.id} value={cat.id}>
+                                {cat.name}{cat.comments ? ` - ${cat.comments}` : ''}
+                              </option>
                             ))
                           )}
                         </select>
@@ -692,11 +725,6 @@ export function AddComponent() {
                           <Edit className="w-5 h-5" />
                         </button>
                       </div>
-                      {formData.category && categories.find(c => c.id === Number(formData.category))?.comments && (
-                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 italic">
-                          {categories.find(c => c.id === Number(formData.category))?.comments}
-                        </p>
-                      )}
                     </div>
                     <div className="flex flex-col gap-2">
                       <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Package</label>
@@ -984,15 +1012,12 @@ export function AddComponent() {
                 <div className="mt-6">
                   <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Reference URL</label>
                   <div className={`mt-2 flex rounded-lg shadow-sm focus-within:ring-4 focus-within:ring-primary/20 focus-within:border-primary transition-all border border-slate-200 dark:border-slate-700`}>
-                    <span className="inline-flex items-center px-3 rounded-l-lg border-r border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-500 text-sm">
-                      https://
-                    </span>
                     <input
                       name="referenceUrl"
                       value={formData.referenceUrl}
                       onChange={handleInputChange}
-                      className="form-input flex-1 block w-full rounded-none rounded-r-lg border-none bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-0 text-sm h-11 outline-none"
-                      placeholder="www.mouser.com/product/..."
+                      className="form-input flex-1 block w-full rounded-lg border-none bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-0 text-sm h-11 px-4 outline-none"
+                      placeholder="https://www.mouser.com/product/..."
                       type="text"
                     />
                   </div>
@@ -1068,18 +1093,25 @@ export function AddComponent() {
                             </button>
                           </span>
                         ))}
-                        <div className="relative flex-1 min-w-[150px]">
+                        <div className="relative flex-1 min-w-[150px] flex items-center">
                           <span className="absolute inset-y-0 left-0 pl-1 flex items-center text-slate-400">
                             <Barcode className="w-4 h-4" />
                           </span>
                           <input
-                            className="w-full bg-transparent border-none focus:ring-0 text-sm h-8 pl-7 outline-none font-mono"
+                            className="w-full bg-transparent border-none focus:ring-0 text-sm h-8 pl-7 pr-8 outline-none font-mono"
                             placeholder="Scan or enter barcode..."
                             type="text"
                             value={barcodeInput}
                             onChange={(e) => setBarcodeInput(e.target.value)}
                             onKeyDown={handleBarcodeKeyDown}
                           />
+                          <button 
+                            onClick={() => setShowScanner(true)}
+                            className="absolute right-1 p-1 text-slate-400 hover:text-primary transition-colors sm:hidden"
+                            title="Scan with Camera"
+                          >
+                            <Camera className="w-4 h-4" />
+                          </button>
                         </div>
                       </div>
                       <div className="bg-slate-50 dark:bg-slate-900/50 rounded-xl p-6 flex flex-col items-center justify-center gap-4 border border-slate-200 dark:border-slate-800 min-h-[160px] overflow-hidden">
@@ -1178,6 +1210,92 @@ export function AddComponent() {
           </div>
         </div>
       )}
+
+      {/* AI Proposal Modal */}
+      {aiProposal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm px-4">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 max-w-md w-full shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center gap-3 mb-4 text-primary">
+              <div className="p-2 bg-primary/10 rounded-full">
+                <Sparkles className="w-6 h-6" />
+              </div>
+              <h3 className="text-xl font-bold text-slate-900 dark:text-white">AI Suggestions</h3>
+            </div>
+            <p className="text-slate-500 dark:text-slate-400 text-sm mb-6">
+              The AI suggested new options that don't exist in your database yet. Would you like to create them?
+            </p>
+            
+            <div className="space-y-4 mb-6">
+              {aiProposal.category && (
+                <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50">
+                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">New Category</p>
+                  <p className="text-slate-900 dark:text-white font-medium">{aiProposal.category}</p>
+                </div>
+              )}
+              {aiProposal.subcategory && (
+                <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50">
+                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">New Subcategory</p>
+                  <p className="text-slate-900 dark:text-white font-medium">{aiProposal.subcategory}</p>
+                </div>
+              )}
+              {aiProposal.package && (
+                <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50">
+                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">New Package</p>
+                  <p className="text-slate-900 dark:text-white font-medium">{aiProposal.package}</p>
+                </div>
+              )}
+            </div>
+
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setAiProposal(null)}
+                className="px-4 py-2 rounded-xl text-sm font-semibold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+              >
+                Ignore
+              </button>
+              <button
+                onClick={async () => {
+                  try {
+                    let newCatId = formData.category;
+                    let newPkgId = formData.pkg;
+                    let newSubcat = formData.subcategory;
+
+                    if (aiProposal.category) {
+                      const catRes = await directus.request(createItem('components_types', { name: aiProposal.category }));
+                      newCatId = catRes.id.toString();
+                      setCategories(prev => [...prev, catRes as ComponentType]);
+                    }
+                    if (aiProposal.subcategory) {
+                      newSubcat = aiProposal.subcategory;
+                    }
+                    if (aiProposal.package) {
+                      const pkgRes = await directus.request(createItem('components_packages', { name: aiProposal.package }));
+                      newPkgId = pkgRes.id.toString();
+                      setPackages(prev => [...prev, pkgRes as ComponentPackage]);
+                    }
+
+                    setFormData(prev => ({
+                      ...prev,
+                      category: newCatId,
+                      subcategory: newSubcat,
+                      pkg: newPkgId
+                    }));
+
+                    toast.success("Created new options successfully");
+                    setAiProposal(null);
+                  } catch (error) {
+                    console.error("Failed to create AI proposals", error);
+                    toast.error("Failed to create new options");
+                  }
+                }}
+                className="px-4 py-2 rounded-xl text-sm font-semibold bg-primary text-white hover:bg-primary/90 transition-colors shadow-lg shadow-primary/20"
+              >
+                Create & Apply
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {/* Category Modal */}
       {showCategoryModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm px-4">
@@ -1196,12 +1314,12 @@ export function AddComponent() {
                 />
               </div>
               <div className="flex flex-col gap-2">
-                <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Comments</label>
+                <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Subcategory</label>
                 <textarea
                   value={modalComments}
                   onChange={(e) => setModalComments(e.target.value)}
                   className={`form-input w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white p-3 text-sm min-h-[80px] resize-none ${focusClasses}`}
-                  placeholder="Optional description..."
+                  placeholder="e.g. SMD, Through-hole..."
                 />
               </div>
             </div>
@@ -1336,6 +1454,20 @@ export function AddComponent() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Barcode Scanner Modal */}
+      {showScanner && (
+        <BarcodeScanner 
+          onScan={(decodedText) => {
+            if (!barcodes.includes(decodedText)) {
+              setBarcodes(prev => [...prev, decodedText]);
+              toast.success(`Scanned: ${decodedText}`);
+            }
+            setShowScanner(false);
+          }}
+          onClose={() => setShowScanner(false)}
+        />
       )}
     </>
   );

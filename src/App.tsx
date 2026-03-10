@@ -14,6 +14,7 @@ import { Categories } from "./pages/Categories";
 import { AddComponent } from "./pages/AddComponent";
 import { BatchBarcodes } from "./pages/BatchBarcodes";
 import { Boxes } from "./pages/Boxes";
+import { Settings } from "./pages/Settings";
 import { useEffect } from "react";
 
 function AppContent() {
@@ -59,7 +60,7 @@ function AppContent() {
 
   return (
     <div className="relative flex h-auto min-h-screen w-full flex-col overflow-x-hidden bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 font-display transition-colors duration-300">
-      <Toaster position="top-right" richColors />
+      <Toaster position="top-right" richColors offset="80px" toastOptions={{ className: 'mt-16 sm:mt-0' }} />
       <Header />
       <Routes>
         <Route path="/" element={<Dashboard />} />
@@ -70,6 +71,7 @@ function AppContent() {
         <Route path="/categories" element={<Categories />} />
         <Route path="/boxes" element={<Boxes />} />
         <Route path="/barcodes" element={<BatchBarcodes />} />
+        <Route path="/settings" element={<Settings />} />
       </Routes>
       <Footer />
     </div>

@@ -278,9 +278,9 @@ export function BatchBarcodes() {
         </div>
       </aside>
       {/* Main Preview Area */}
-      <section className="flex-1 bg-slate-100 dark:bg-slate-900/50 p-4 lg:p-8 overflow-y-auto">
-        <div className="max-w-4xl mx-auto">
-          <div className="flex items-center justify-between mb-6 no-print">
+      <section className="flex-1 bg-slate-100 dark:bg-slate-900/50 p-4 lg:p-8 overflow-auto">
+        <div className="w-full min-w-max mx-auto flex flex-col items-center">
+          <div className="flex items-center justify-between mb-6 no-print w-full max-w-4xl">
             <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200 flex items-center gap-2">
               <Zap className="w-5 h-5 text-primary" />
               Print Preview (A4 Sheet)

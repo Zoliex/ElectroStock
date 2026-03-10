@@ -28,7 +28,7 @@ import {
 } from "lucide-react";
 import { Link, useParams, useNavigate } from "react-router-dom";
 import { directus, Component, getFileUrl, ComponentType, Box, ComponentPackage } from "../lib/directus";
-import { readItem, deleteItem, updateItem } from "@directus/sdk";
+import { readItem, readItems, deleteItem, updateItem } from "@directus/sdk";
 import MDEditor from '@uiw/react-md-editor';
 import BarcodeGenerator from "react-barcode";
 import { toast } from "sonner";
@@ -37,6 +37,7 @@ export function ComponentDetails() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [component, setComponent] = useState<Component | null>(null);
+  const [relatedComponents, setRelatedComponents] = useState<Component[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showStockModal, setShowStockModal] = useState(false);
@@ -52,6 +53,21 @@ export function ComponentDetails() {
         })
       );
       setComponent(fetchedComponent as unknown as Component);
+
+      // Fetch related components
+      if (fetchedComponent.type) {
+        const relatedRes = await directus.request(
+          readItems('components', {
+            filter: {
+              type: { _eq: (fetchedComponent.type as any).id },
+              id: { _neq: Number(id) }
+            },
+            limit: 4,
+            fields: ['id', 'name', 'main_image', 'quantity_available', 'type.*'] as any
+          })
+        );
+        setRelatedComponents(relatedRes as unknown as Component[]);
+      }
     } catch (error) {
       console.error("Error fetching component details:", error);
       toast.error("Failed to load component details");
@@ -90,7 +106,8 @@ export function ComponentDetails() {
         return;
     }
 
-    const newQuantity = (component.quantity_available || 0) + stockAdjustment;
+    const currentQuantity = Number(component.quantity_available) || 0;
+    const newQuantity = currentQuantity + stockAdjustment;
     
     if (newQuantity < 0) {
         toast.error("Cannot reduce stock below zero");
@@ -135,6 +152,7 @@ export function ComponentDetails() {
   }
 
   const categoryName = (component.type as ComponentType)?.name || "Uncategorized";
+  const subcategoryName = component.subcategory || "";
   const locationName = (component.location as Box)?.name || "Unknown Location";
   const locationId = (component.location as Box)?.unique_id || "N/A";
   const packageName = (component.package as ComponentPackage)?.name || "Unknown Package";
@@ -198,6 +216,12 @@ export function ComponentDetails() {
         </Link>
         <ChevronRight className="w-4 h-4" />
         <Link to={`/inventory?category=${(component.type as ComponentType)?.id || ''}`} className="hover:text-primary cursor-pointer transition-colors">{categoryName}</Link>
+        {subcategoryName && (
+          <>
+            <ChevronRight className="w-4 h-4" />
+            <span className="text-slate-500 dark:text-slate-400">{subcategoryName}</span>
+          </>
+        )}
         <ChevronRight className="w-4 h-4" />
         <span className="text-slate-900 dark:text-slate-100 font-medium">{component.name}</span>
       </nav>
@@ -210,7 +234,7 @@ export function ComponentDetails() {
             <div className="aspect-video w-full relative bg-slate-100 dark:bg-slate-800 rounded-t-3xl overflow-hidden">
               <img
                 alt={component.name}
-                className="w-full h-full object-contain p-4"
+                className="w-full h-full object-cover"
                 src={component.main_image ? getFileUrl(component.main_image) : "https://via.placeholder.com/800x400?text=No+Image"}
               />
               <div className="absolute top-4 right-4 flex gap-2">
@@ -255,6 +279,12 @@ export function ComponentDetails() {
                 <p className="text-xs font-bold text-slate-400 uppercase mb-1">Category</p>
                 <p className="font-semibold">{categoryName}</p>
               </div>
+              {subcategoryName && (
+                <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800">
+                  <p className="text-xs font-bold text-slate-400 uppercase mb-1">Subcategory</p>
+                  <p className="font-semibold">{subcategoryName}</p>
+                </div>
+              )}
               {component.keywords && component.keywords.map((keyword, idx) => (
                 <div key={idx} className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800">
                   <p className="text-xs font-bold text-slate-400 uppercase mb-1">Tag {idx + 1}</p>
@@ -498,6 +528,47 @@ export function ComponentDetails() {
         </div>
       </div>
 
+      {/* Related Components Section */}
+      {relatedComponents.length > 0 && (
+        <div className="mt-12">
+          <h3 className="text-xl font-bold mb-6 flex items-center gap-2">
+            <Package className="w-6 h-6 text-primary" />
+            Similar Components
+          </h3>
+          <div className="flex overflow-x-auto snap-x snap-mandatory gap-4 pb-4 hide-scrollbar">
+            {relatedComponents.map((item) => (
+              <Link
+                key={item.id}
+                to={`/inventory/${item.id}`}
+                className="snap-start shrink-0 w-[240px] md:w-[280px] bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200 dark:border-slate-800 hover:border-primary transition-all group shadow-sm hover:shadow-md"
+              >
+                <div className="aspect-square rounded-xl bg-slate-100 dark:bg-slate-800 mb-4 overflow-hidden relative">
+                  <img
+                    src={item.main_image ? getFileUrl(item.main_image) : "https://via.placeholder.com/400x400?text=No+Image"}
+                    alt={item.name}
+                    className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                    referrerPolicy="no-referrer"
+                  />
+                  <div className="absolute top-2 right-2">
+                    {item.quantity_available > 0 ? (
+                      <span className="px-2 py-0.5 bg-emerald-500 text-white text-[10px] font-bold rounded-full shadow-sm">
+                        {item.quantity_available} IN STOCK
+                      </span>
+                    ) : (
+                      <span className="px-2 py-0.5 bg-red-500 text-white text-[10px] font-bold rounded-full shadow-sm">
+                        OUT
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <h4 className="font-bold text-slate-900 dark:text-white text-sm truncate">{item.name}</h4>
+                <p className="text-xs text-slate-500 mt-1 truncate">{(item.type as ComponentType)?.name || "Uncategorized"}</p>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Delete Confirmation Modal */}
       {showDeleteModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm px-4">
@@ -544,7 +615,7 @@ export function ComponentDetails() {
                 </button>
                 <div className="flex flex-col items-center w-24">
                     <span className="text-3xl font-black text-slate-900 dark:text-white">
-                        {(component.quantity_available || 0) + stockAdjustment}
+                        {(Number(component.quantity_available) || 0) + stockAdjustment}
                     </span>
                     <span className={`text-xs font-bold ${stockAdjustment > 0 ? 'text-emerald-500' : stockAdjustment < 0 ? 'text-red-500' : 'text-slate-400'}`}>
                         {stockAdjustment > 0 ? `+${stockAdjustment}` : stockAdjustment}

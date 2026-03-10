@@ -1,16 +1,20 @@
 import { useState, useRef, useEffect } from "react";
-import { MessageSquare, X, Send, Loader2, Bot, User } from "lucide-react";
-import { GoogleGenAI } from "@google/genai";
+import { MessageSquare, X, Send, Loader2, Bot, User, Plus } from "lucide-react";
+import { GoogleGenAI, Type, FunctionDeclaration } from "@google/genai";
 import { cn } from "../lib/utils";
+import { directus } from "../lib/directus";
+import { readItems } from "@directus/sdk";
+import { useNavigate } from "react-router-dom";
 
 export function Chatbot() {
   const [isOpen, setIsOpen] = useState(false);
-  const [messages, setMessages] = useState<{ role: "user" | "model"; text: string }[]>([
+  const [messages, setMessages] = useState<{ role: "user" | "model"; text: string; isAction?: boolean }[]>([
     { role: "model", text: "Hi! I'm your ElectroStock assistant. How can I help you with your inventory today?" },
   ]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const navigate = useNavigate();
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -18,41 +22,107 @@ export function Chatbot() {
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages]);
-
-  const [chat, setChat] = useState<any>(null);
-
-  useEffect(() => {
-    try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-      const newChat = ai.chats.create({
-        model: "gemini-3.1-pro-preview",
-        config: {
-          systemInstruction: "You are a helpful assistant for an electronics inventory management app called ElectroStock.",
-        },
-      });
-      setChat(newChat);
-    } catch (e) {
-      console.error("Failed to initialize chat", e);
-    }
-  }, []);
+  }, [messages, isOpen]);
 
   const handleSend = async () => {
-    if (!input.trim() || isLoading || !chat) return;
+    if (!input.trim() || isLoading) return;
 
     const userMessage = input.trim();
     setInput("");
+    
     setMessages((prev) => [...prev, { role: "user", text: userMessage }]);
     setIsLoading(true);
 
     try {
-      const response = await chat.sendMessage({ message: userMessage });
-      setMessages((prev) => [...prev, { role: "model", text: response.text || "I'm sorry, I couldn't process that." }]);
-    } catch (error) {
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      
+      const searchInventoryFunction: FunctionDeclaration = {
+        name: "searchInventory",
+        description: "Search the electronic components inventory by name, category, or description.",
+        parameters: {
+          type: Type.OBJECT,
+          properties: {
+            query: {
+              type: Type.STRING,
+              description: "The search query (e.g., 'resistor', '10k', 'arduino')."
+            }
+          },
+          required: ["query"]
+        }
+      };
+
+      const suggestCreateComponentFunction: FunctionDeclaration = {
+        name: "suggestCreateComponent",
+        description: "Suggest the user to create a new component when they ask to add, create, or insert a new item into the inventory.",
+        parameters: {
+          type: Type.OBJECT,
+          properties: {
+            reason: {
+              type: Type.STRING,
+              description: "The reason for suggesting creation."
+            }
+          }
+        }
+      };
+
+      const response = await ai.models.generateContent({
+        model: "gemini-3.1-pro-preview",
+        contents: [
+          ...messages.map(m => ({ role: m.role, parts: [{ text: m.text }] })),
+          { role: "user", parts: [{ text: userMessage }] }
+        ],
+        config: {
+          systemInstruction: "You are a helpful assistant for an electronics inventory management app called ElectroStock. You can search the inventory using the searchInventory tool. You CANNOT create, update, or delete components directly. If the user asks to create or add a component, you MUST use the suggestCreateComponent tool to provide them with a button to the creation page.",
+          tools: [{ functionDeclarations: [searchInventoryFunction, suggestCreateComponentFunction] }]
+        }
+      });
+
+      let finalResponseText = response.text || "";
+      let isAction = false;
+
+      if (response.functionCalls && response.functionCalls.length > 0) {
+        const call = response.functionCalls[0];
+        
+        if (call.name === "searchInventory") {
+          const args = call.args as any;
+          try {
+            const items = await directus.request(readItems('components', {
+              search: args.query,
+              limit: 5,
+              fields: ['name', 'quantity_available', 'description', 'type.name'] as any
+            }));
+            
+            const functionResponse = {
+              name: "searchInventory",
+              response: { items }
+            };
+
+            const secondResponse = await ai.models.generateContent({
+              model: "gemini-3.1-pro-preview",
+              contents: [
+                ...messages.map(m => ({ role: m.role, parts: [{ text: m.text }] })),
+                { role: "user", parts: [{ text: userMessage }] },
+                { role: "model", parts: [{ functionCall: call }] },
+                { role: "user", parts: [{ functionResponse }] }
+              ]
+            });
+            
+            finalResponseText = secondResponse.text || "Here are the results.";
+          } catch (e) {
+            finalResponseText = "I encountered an error while searching the inventory.";
+          }
+        } else if (call.name === "suggestCreateComponent") {
+          finalResponseText = "I cannot create components directly, but you can use the button below to go to the creation page.";
+          isAction = true;
+        }
+      }
+
+      setMessages((prev) => [...prev, { role: "model", text: finalResponseText, isAction }]);
+    } catch (error: any) {
       console.error("Error calling Gemini API:", error);
       setMessages((prev) => [
         ...prev,
-        { role: "model", text: "Sorry, I encountered an error while processing your request." },
+        { role: "model", text: error.message || "Sorry, I encountered an error while processing your request." },
       ]);
     } finally {
       setIsLoading(false);
@@ -122,7 +192,19 @@ export function Chatbot() {
                     : "bg-slate-100 dark:bg-slate-800 rounded-tl-none"
                 )}
               >
-                {msg.text}
+                <div className="whitespace-pre-wrap">{msg.text}</div>
+                {msg.isAction && (
+                  <button 
+                    onClick={() => {
+                      setIsOpen(false);
+                      navigate('/inventory/add');
+                    }}
+                    className="mt-3 w-full py-2 bg-primary/10 hover:bg-primary/20 text-primary rounded-lg font-semibold flex items-center justify-center gap-2 transition-colors"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Create Component
+                  </button>
+                )}
               </div>
             </div>
           ))}
@@ -154,7 +236,7 @@ export function Chatbot() {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               placeholder="Ask about your inventory..."
-              className="flex-1 bg-slate-100 dark:bg-slate-800 border-none rounded-full px-4 py-2.5 text-sm focus:ring-2 focus:ring-primary"
+              className="flex-1 bg-slate-100 dark:bg-slate-800 border-none rounded-full px-4 py-2.5 text-sm focus:ring-2 focus:ring-primary outline-none"
             />
             <button
               type="submit"

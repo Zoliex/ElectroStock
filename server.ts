@@ -2,14 +2,50 @@ import express from "express";
 import { createServer as createViteServer } from "vite";
 import axios from "axios";
 import dotenv from "dotenv";
+import fs from "fs";
+import path from "path";
 
 dotenv.config();
+
+const SETTINGS_FILE = path.join(process.cwd(), 'settings.json');
+
+const defaultSettings = {
+  directusUrl: process.env.VITE_DIRECTUS_URL || "https://directus.example.com",
+  criticalStockThreshold: 10,
+  currency: "USD",
+  enableAiSuggestions: true
+};
 
 async function startServer() {
   const app = express();
   const PORT = 3000;
 
   app.use(express.json());
+
+  // Settings API
+  app.get("/api/settings", (req, res) => {
+    try {
+      if (fs.existsSync(SETTINGS_FILE)) {
+        const data = fs.readFileSync(SETTINGS_FILE, 'utf-8');
+        res.json({ ...defaultSettings, ...JSON.parse(data) });
+      } else {
+        res.json(defaultSettings);
+      }
+    } catch (error) {
+      res.status(500).json({ error: "Failed to read settings" });
+    }
+  });
+
+  app.post("/api/settings", (req, res) => {
+    try {
+      const currentSettings = fs.existsSync(SETTINGS_FILE) ? JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf-8')) : defaultSettings;
+      const newSettings = { ...currentSettings, ...req.body };
+      fs.writeFileSync(SETTINGS_FILE, JSON.stringify(newSettings, null, 2));
+      res.json({ success: true, settings: newSettings });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to save settings" });
+    }
+  });
 
   // SerpApi Image Search Proxy Route
   app.get("/api/search-images", async (req, res) => {
@@ -24,50 +60,25 @@ async function startServer() {
     }
 
     try {
-      // Try SerpApi first
-      if (process.env.SERPAPI_API_KEY) {
-        try {
-          const response = await axios.get("https://serpapi.com/search.json", {
-            params: {
-              engine: "google_images",
-              q: q,
-              api_key: process.env.SERPAPI_API_KEY
-            }
-          });
-
-          if (!response.data.error) {
-            const matches = response.data.images_results.map((result: any) => ({
-              url: result.original,
-              title: result.title
-            }));
-            return res.json(matches);
-          }
-        } catch (serpError: any) {
-          console.error("SerpApi failed, trying Unsplash:", serpError.message);
+      const response = await axios.get("https://serpapi.com/search.json", {
+        params: {
+          engine: "google_images",
+          q: q,
+          api_key: process.env.SERPAPI_API_KEY
         }
-      }
+      });
 
-      // Fallback to Unsplash
-      if (process.env.UNSPLASH_ACCESS_KEY) {
-        const response = await axios.get("https://api.unsplash.com/search/photos", {
-          params: {
-            query: q,
-            per_page: 10,
-            client_id: process.env.UNSPLASH_ACCESS_KEY
-          }
-        });
-
-        const matches = response.data.results.map((result: any) => ({
-          url: result.urls.regular,
-          title: result.alt_description || "Unsplash Image"
+      if (!response.data.error) {
+        const matches = response.data.images_results.map((result: any) => ({
+          url: result.original,
+          title: result.title
         }));
         return res.json(matches);
       }
-
-      throw new Error("No image search provider configured");
+      return res.json([]);
     } catch (error: any) {
-      console.error("Image Search Error:", error.message);
-      res.status(500).json({ error: "Failed to fetch images. Please check your API key configuration." });
+      console.error("SerpApi failed", error.message);
+      res.status(500).json({ error: "Failed to fetch images." });
     }
   });
 

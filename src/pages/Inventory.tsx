@@ -1,9 +1,10 @@
 import { useState, useEffect } from "react";
 import { Link, useSearchParams, useNavigate } from "react-router-dom";
 import { motion } from "motion/react";
-import { Download, Plus, Loader2, Package, Filter, ArrowUpDown, Search, X, AlertTriangle, ChevronLeft, ChevronRight, Layers } from "lucide-react";
+import { Download, Plus, Loader2, Package, Filter, ArrowUpDown, Search, X, AlertTriangle, ChevronLeft, ChevronRight, Layers, Camera } from "lucide-react";
 import { directus, Component, getFileUrl, ComponentType, Box, ComponentPackage } from "../lib/directus";
 import { readItems, aggregate } from "@directus/sdk";
+import { BarcodeScanner } from "../components/BarcodeScanner";
 
 export function Inventory() {
   const [components, setComponents] = useState<Component[]>([]);
@@ -24,6 +25,7 @@ export function Inventory() {
   const [sortBy, setSortBy] = useState<'name' | 'quantity' | 'date'>('date');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [showFilters, setShowFilters] = useState(false);
+  const [showScanner, setShowScanner] = useState(false);
   
   // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
@@ -226,7 +228,7 @@ export function Inventory() {
         <div className="flex flex-col md:flex-row gap-4 justify-between">
           {/* Search & Filter Toggle */}
           <div className="flex gap-2 flex-1">
-            <div className="relative flex-1">
+            <div className="relative flex-1 flex items-center">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
               <input 
                 value={searchQuery}
@@ -236,8 +238,15 @@ export function Inventory() {
                   return prev;
                 })}
                 placeholder="Search components..."
-                className="w-full pl-9 pr-4 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
+                className="w-full pl-9 pr-10 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
               />
+              <button 
+                onClick={() => setShowScanner(true)}
+                className="absolute right-2 p-1.5 text-slate-400 hover:text-primary transition-colors sm:hidden"
+                title="Scan with Camera"
+              >
+                <Camera className="w-4 h-4" />
+              </button>
             </div>
             <button 
               onClick={() => setShowFilters(!showFilters)}
@@ -404,6 +413,7 @@ export function Inventory() {
           components.map((comp) => {
             const status = getStatus(comp.quantity_available);
             const categoryName = (comp.type as ComponentType)?.name || "Uncategorized";
+            const subcategoryName = comp.subcategory || "";
             
             return (
               <Link
@@ -426,7 +436,7 @@ export function Inventory() {
                 </div>
                 <div className="p-4">
                   <p className={`text-[10px] font-bold uppercase tracking-tighter mb-1 text-primary truncate`}>
-                    {categoryName}
+                    {categoryName}{subcategoryName ? ` / ${subcategoryName}` : ''}
                   </p>
                   <h3 className="font-bold text-sm text-slate-900 dark:text-slate-100 truncate" title={comp.name}>{comp.name}</h3>
                   <div className="mt-3 flex items-center justify-between">
@@ -451,15 +461,15 @@ export function Inventory() {
       </div>
 
       {/* Pagination */}
-      <div className="mt-12 flex items-center justify-center gap-2">
+      <div className="mt-12 flex flex-wrap items-center justify-center gap-2">
         <button
           disabled={currentPage === 1}
           onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-          className="px-4 py-2 rounded-lg border border-slate-200 dark:border-slate-800 text-sm font-bold disabled:opacity-50 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors flex items-center gap-2"
+          className="px-3 sm:px-4 py-2 rounded-lg border border-slate-200 dark:border-slate-800 text-sm font-bold disabled:opacity-50 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors flex items-center gap-1 sm:gap-2"
         >
-          <ChevronLeft className="w-4 h-4" /> Previous
+          <ChevronLeft className="w-4 h-4" /> <span className="hidden sm:inline">Previous</span>
         </button>
-        <div className="flex items-center gap-1">
+        <div className="flex flex-wrap items-center justify-center gap-1">
           {totalPages > 0 ? Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
             let pageNum = currentPage;
             if (currentPage <= 3) pageNum = i + 1;
@@ -489,11 +499,25 @@ export function Inventory() {
         <button
           disabled={currentPage === totalPages || totalPages === 0}
           onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-          className="px-4 py-2 rounded-lg border border-slate-200 dark:border-slate-800 text-sm font-bold disabled:opacity-50 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors flex items-center gap-2"
+          className="px-3 sm:px-4 py-2 rounded-lg border border-slate-200 dark:border-slate-800 text-sm font-bold disabled:opacity-50 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors flex items-center gap-1 sm:gap-2"
         >
-          Next <ChevronRight className="w-4 h-4" />
+          <span className="hidden sm:inline">Next</span> <ChevronRight className="w-4 h-4" />
         </button>
       </div>
+
+      {/* Barcode Scanner Modal */}
+      {showScanner && (
+        <BarcodeScanner 
+          onScan={(decodedText) => {
+            setSearchParams(prev => {
+              prev.set("q", decodedText);
+              return prev;
+            });
+            setShowScanner(false);
+          }}
+          onClose={() => setShowScanner(false)}
+        />
+      )}
     </motion.main>
   );
 }
