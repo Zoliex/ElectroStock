@@ -289,7 +289,7 @@ export function AddComponent() {
   const [resistorUnit, setResistorUnit] = useState("Ω");
   const [inductorUnit, setInductorUnit] = useState("µH");
   const [isBatchMode, setIsBatchMode] = useState(false);
-  const [batchItems, setBatchItems] = useState<{ value: string; quantity: number }[]>([{ value: "", quantity: 1 }]);
+  const [batchItems, setBatchItems] = useState<{ value: string; quantity: number; unit: string }[]>([{ value: "", quantity: 1, unit: "" }]);
   const resistorSvgRef = useRef<SVGSVGElement>(null);
   const inductorSvgRef = useRef<SVGSVGElement>(null);
 
@@ -304,8 +304,7 @@ export function AddComponent() {
           canvas.width = img.width * 2; // Higher res
           canvas.height = img.height * 2;
           if (ctx) {
-            ctx.fillStyle = "white"; // Background for PNG
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
             ctx.scale(2, 2);
             ctx.drawImage(img, 0, 0);
           }
@@ -849,7 +848,7 @@ export function AddComponent() {
             </feMerge>
           </filter>
         </defs>
-        <rect width="100%" height="100%" fill="white"/>
+        <rect width="100%" height="100%" fill="none"/>
         
         <!-- Leads -->
         <rect x="0" y="116" width="240" height="8" fill="url(#leadGrad)" rx="4" />
@@ -913,7 +912,7 @@ export function AddComponent() {
             <stop offset="100%" stop-color="#64748b" />
           </linearGradient>
         </defs>
-        <rect width="100%" height="100%" fill="white"/>
+        <rect width="100%" height="100%" fill="none"/>
         
         <!-- Leads -->
         <rect x="0" y="116" width="240" height="8" fill="url(#leadGradInd)" rx="4" />
@@ -958,8 +957,8 @@ export function AddComponent() {
         canvas.width = 400;
         canvas.height = 400;
         if (ctx) {
-          ctx.fillStyle = "white";
-          ctx.fillRect(0, 0, canvas.width, canvas.height);
+          // Transparent background
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
           // Center the 240x240 SVG in the 400x400 canvas
           ctx.drawImage(img, 80, 80, 240, 240);
         }
@@ -994,7 +993,8 @@ export function AddComponent() {
         ? batchItems.filter(i => i.value.trim())
         : [{ 
             value: isResistor ? resistorValue : (isInductor ? inductanceValue : ""), 
-            quantity: Number(formData.quantity) 
+            quantity: Number(formData.quantity),
+            unit: isResistor ? resistorUnit : (isInductor ? inductorUnit : "")
           }];
 
       if (itemsToSave.length === 0) {
@@ -1007,9 +1007,10 @@ export function AddComponent() {
 
         // 1. Generate and Upload Procedural Image if needed
         if (isProcedural) {
+          const itemUnit = (item as any).unit || (isResistor ? resistorUnit : inductorUnit);
           const svgString = isResistor 
-            ? getResistorSvgString(item.value, resistorUnit, tolerance, tempCo, bandCount) 
-            : getInductorSvgString(item.value, inductorUnit, tolerance);
+            ? getResistorSvgString(item.value, itemUnit, tolerance, tempCo, bandCount) 
+            : getInductorSvgString(item.value, itemUnit, tolerance);
           
           const blob = await svgStringToBlob(svgString);
           const file = new File([blob], `${item.value.replace(/[^a-z0-9]/gi, '_')}.png`, { type: "image/png" });
@@ -1286,7 +1287,7 @@ export function AddComponent() {
                           <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Batch Items</label>
                           <button 
                             type="button"
-                            onClick={() => setBatchItems([...batchItems, { value: "", quantity: 1 }])}
+                            onClick={() => setBatchItems([...batchItems, { value: "", quantity: 1, unit: isResistor ? resistorUnit : (isInductor ? inductorUnit : "") }])}
                             className="flex items-center gap-1 text-xs font-bold text-primary hover:underline"
                           >
                             <Plus className="w-3 h-3" /> Add Item
@@ -1297,18 +1298,44 @@ export function AddComponent() {
                             <div key={index} className="flex gap-3 items-end animate-in fade-in slide-in-from-left-2 duration-200">
                               <div className="flex-1 flex flex-col gap-1.5">
                                 <label className="text-[10px] uppercase font-bold text-slate-400">Value</label>
-                                <input 
-                                  value={item.value}
-                                  onChange={(e) => {
-                                    const newItems = [...batchItems];
-                                    newItems[index].value = e.target.value;
-                                    setBatchItems(newItems);
-                                  }}
-                                  placeholder="e.g. 10k"
-                                  className={`form-input w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white h-10 px-3 text-sm ${focusClasses}`}
-                                />
+                                <div className="flex gap-1">
+                                  <input 
+                                    value={item.value}
+                                    onChange={(e) => {
+                                      const newItems = [...batchItems];
+                                      newItems[index].value = e.target.value;
+                                      setBatchItems(newItems);
+                                    }}
+                                    placeholder="e.g. 10"
+                                    className={`form-input flex-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white h-10 px-3 text-sm ${focusClasses}`}
+                                  />
+                                  <select
+                                    value={item.unit || (isResistor ? resistorUnit : inductorUnit)}
+                                    onChange={(e) => {
+                                      const newItems = [...batchItems];
+                                      newItems[index].unit = e.target.value;
+                                      setBatchItems(newItems);
+                                    }}
+                                    className={`form-select w-20 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white h-10 px-1 text-xs ${focusClasses}`}
+                                  >
+                                    {isResistor ? (
+                                      <>
+                                        <option value="Ω">Ω</option>
+                                        <option value="kΩ">kΩ</option>
+                                        <option value="MΩ">MΩ</option>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <option value="nH">nH</option>
+                                        <option value="µH">µH</option>
+                                        <option value="mH">mH</option>
+                                        <option value="H">H</option>
+                                      </>
+                                    )}
+                                  </select>
+                                </div>
                               </div>
-                              <div className="w-24 flex flex-col gap-1.5">
+                              <div className="w-20 flex flex-col gap-1.5">
                                 <label className="text-[10px] uppercase font-bold text-slate-400">Qty</label>
                                 <input 
                                   type="number"
