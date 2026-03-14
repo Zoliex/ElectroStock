@@ -54,9 +54,42 @@ export interface Schema {
 }
 
 const DIRECTUS_URL = typeof window !== 'undefined' ? `${window.location.origin}/directus` : '/directus';
-const DIRECTUS_TOKEN = 'FHSqhqx84zCUm3eM-UHpqjISY2bCSDcY';
+const DIRECTUS_TOKEN = 'MprhfY1x9EXUx-JIcxMnUzF6jY3lyC-Y';
 
-export const directus = createDirectus<Schema>(DIRECTUS_URL)
+const loggingFetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+  const url = input.toString();
+  const method = init?.method || 'GET';
+  
+  let bodyLog = '';
+  if (init?.body) {
+    if (typeof init.body === 'string') {
+      try {
+        bodyLog = JSON.parse(init.body);
+      } catch {
+        bodyLog = init.body;
+      }
+    } else {
+      bodyLog = '[Non-string body]';
+    }
+  }
+
+  console.log(`[Directus Request] ${method} ${url}`, bodyLog);
+  
+  try {
+    const response = await fetch(input, init);
+    console.log(`[Directus Response] ${response.status} ${url}`);
+    return response;
+  } catch (error) {
+    console.error(`[Directus Error] ${method} ${url}`, error);
+    throw error;
+  }
+};
+
+export const directus = createDirectus<Schema>(DIRECTUS_URL, {
+  globals: {
+    fetch: loggingFetch
+  }
+})
   .with(staticToken(DIRECTUS_TOKEN))
   .with(rest());
 

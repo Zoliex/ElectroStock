@@ -28,7 +28,6 @@ import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import BarcodeGenerator from "react-barcode";
 import MDEditor from '@uiw/react-md-editor';
 import { toast } from "sonner";
-import { GoogleGenAI, Type } from "@google/genai";
 import { directus, Box, ComponentPackage, ComponentType, getFileUrl, Component } from "../lib/directus";
 import { readItems, uploadFiles, createItem, readItem, updateItem } from "@directus/sdk";
 import { BarcodeScanner } from "../components/BarcodeScanner";
@@ -380,43 +379,23 @@ export function AddComponent() {
       
       const context = searchResults.slice(0, 5).map((r: any) => r.title).join("\n");
 
-      // 2. Use Gemini to fill fields
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-      const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: `Research the electronic component named "${formData.name}". 
-        Here is some context from search results: ${context}
-        
-        CRITICAL INSTRUCTION FOR CATEGORIES AND PACKAGES:
-        You MUST choose from the following existing categories and packages if they are even remotely similar. DO NOT suggest new ones unless absolutely no existing option fits.
-        Available categories: ${categories.map(c => c.name).join(", ")}.
-        Available packages: ${packages.map(p => p.name).join(", ")}.
-        
-        Provide a detailed technical description for an inventory system in Markdown format.
-        Include:
-        - Component description
-        - Pinout information
-        - Key characteristics/specifications
-        
-        Return the data in JSON format matching the schema.`,
-        config: {
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              description: { type: Type.STRING, description: "A detailed technical description in Markdown format, including pinout, characteristics, etc." },
-              category: { type: Type.STRING, description: "The best-matching category from the available list or a suggested new one" },
-              subcategory: { type: Type.STRING, description: "The best-matching subcategory or a suggested new one" },
-              package: { type: Type.STRING, description: "The best-matching package from the available list or a suggested new one" },
-              keywords: { type: Type.ARRAY, items: { type: Type.STRING }, description: "Relevant technical keywords" },
-              packet_reference: { type: Type.STRING, description: "A likely manufacturer part number or reference" }
-            },
-            required: ["description", "category", "package", "keywords"]
-          }
-        }
+      // 2. Use our backend to fill fields
+      const categoriesInfo = categories.map(c => `${c.name} (Subcategories: ${c.comments || 'none'})`).join("; ");
+      const packagesInfo = packages.map(p => p.name).join(", ");
+      
+      const aiResponse = await fetch("/api/ai-research", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: formData.name,
+          context,
+          categoriesInfo,
+          packagesInfo
+        })
       });
 
-      const data = JSON.parse(response.text || "{}");
+      if (!aiResponse.ok) throw new Error("Failed to get AI research");
+      const data = await aiResponse.json();
       
       // Try to match category and package from existing options
       const matchedCategory = categories.find(c => 
@@ -436,9 +415,26 @@ export function AddComponent() {
       if (!matchedCategory && data.category) {
         proposedCategory = data.category;
       }
+      
       if (data.subcategory) {
-        proposedSubcategory = data.subcategory;
+        if (matchedCategory && matchedCategory.comments) {
+          const existingSubcategories = matchedCategory.comments.split(',').map(s => s.trim());
+          const matchedSubcat = existingSubcategories.find(s => 
+            s.toLowerCase() === data.subcategory.toLowerCase() ||
+            s.toLowerCase().includes(data.subcategory.toLowerCase()) ||
+            data.subcategory.toLowerCase().includes(s.toLowerCase())
+          );
+          
+          if (matchedSubcat) {
+            data.subcategory = matchedSubcat;
+          } else {
+            proposedSubcategory = data.subcategory;
+          }
+        } else {
+          proposedSubcategory = data.subcategory;
+        }
       }
+      
       if (!matchedPackage && data.package) {
         proposedPackage = data.package;
       }
@@ -458,6 +454,7 @@ export function AddComponent() {
 
       if (proposedCategory || proposedSubcategory || proposedPackage) {
         setAiProposal({ category: proposedCategory, subcategory: proposedSubcategory, package: proposedPackage });
+        toast.success("AI has filled the fields, but suggested some new categories/packages.", { id: toastId, duration: 5000 });
       } else {
         toast.success(
           <div className="flex flex-col gap-2">
@@ -538,6 +535,11 @@ export function AddComponent() {
       return;
     }
 
+    if (!isEditMode && !mainImage && !existingMainImage) {
+      toast.error("Please upload a main image.");
+      return;
+    }
+
     setIsSaving(true);
     const toastId = toast.loading(isEditMode ? "Updating component..." : "Saving component...");
     try {
@@ -561,21 +563,26 @@ export function AddComponent() {
       }
 
       // 3. Create or Update Component
-      const componentData = {
+      const componentData: any = {
         name: formData.name,
         description: formData.description,
-        main_image: mainImageId,
-        datasheet: datasheetId,
         quantity_available: Number(formData.quantity),
-        location: formData.storageLocation,
+        location: formData.storageLocation && formData.storageLocation !== "0" ? formData.storageLocation : null,
         url: formData.referenceUrl || null,
         keywords: tags,
         packet_reference: formData.packetReference || null,
-        package: Number(formData.pkg),
-        type: Number(formData.category),
+        package: formData.pkg && formData.pkg !== "0" ? Number(formData.pkg) : null,
+        type: formData.category && formData.category !== "0" ? Number(formData.category) : null,
         subcategory: formData.subcategory || null,
         barcode: barcodes.length > 0 ? barcodes.join(';') : null,
       };
+
+      if (mainImageId) {
+        componentData.main_image = mainImageId;
+      }
+      if (datasheetId) {
+        componentData.datasheet = datasheetId;
+      }
 
       let componentId = id ? Number(id) : null;
 

@@ -4,6 +4,7 @@ import axios from "axios";
 import dotenv from "dotenv";
 import fs from "fs";
 import path from "path";
+import { GoogleGenAI, Type } from "@google/genai";
 
 dotenv.config();
 
@@ -79,6 +80,74 @@ async function startServer() {
     } catch (error: any) {
       console.error("SerpApi failed", error.message);
       res.status(500).json({ error: "Failed to fetch images." });
+    }
+  });
+
+  // AI Research Route
+  app.post("/api/ai-research", async (req, res) => {
+    const { name, context, categoriesInfo, packagesInfo, apiKey } = req.body;
+
+    if (!name) {
+      return res.status(400).json({ error: "Component name is required" });
+    }
+
+    const keyToUse = apiKey || process.env.GEMINI_API_KEY;
+    if (!keyToUse) {
+      return res.status(500).json({ error: "Gemini API key not configured" });
+    }
+
+    try {
+      const ai = new GoogleGenAI({ apiKey: keyToUse });
+      
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: `Research the electronic component named "${name}". 
+        Here is some context from search results: ${context || ''}
+        
+        CRITICAL INSTRUCTION FOR CATEGORIES, SUBCATEGORIES AND PACKAGES:
+        You MUST choose from the following existing categories and packages if they are even remotely similar. DO NOT suggest new ones unless absolutely no existing option fits.
+        Available categories and their subcategories: ${categoriesInfo || 'none'}.
+        Available packages: ${packagesInfo || 'none'}.
+        
+        Provide a detailed technical description for an inventory system in Markdown format.
+        IMPORTANT FORMATTING RULES:
+        - Use proper markdown formatting with double newlines (\\n\\n) between paragraphs.
+        - Use bullet points for lists.
+        - DO NOT output the description as a single long line.
+        Include:
+        - Component description
+        - Pinout information
+        - Key characteristics/specifications
+        
+        Return the data in JSON format matching the schema.`,
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              description: { type: Type.STRING, description: "A detailed technical description in Markdown format, including pinout, characteristics, etc. MUST use proper line breaks." },
+              category: { type: Type.STRING, description: "The best-matching category from the available list or a suggested new one" },
+              subcategory: { type: Type.STRING, description: "The best-matching subcategory from the chosen category's subcategories, or a suggested new one" },
+              package: { type: Type.STRING, description: "The best-matching package from the available list or a suggested new one" },
+              keywords: { type: Type.ARRAY, items: { type: Type.STRING }, description: "Relevant technical keywords" },
+              packet_reference: { type: Type.STRING, description: "A likely manufacturer part number or reference" }
+            },
+            required: ["description", "category", "subcategory", "package", "keywords"]
+          }
+        }
+      });
+
+      const data = JSON.parse(response.text || "{}");
+      
+      // Fix potential double-escaped newlines from Gemini
+      if (data.description) {
+        data.description = data.description.replace(/\\n/g, '\n');
+      }
+
+      res.json(data);
+    } catch (error: any) {
+      console.error("AI Research failed", error);
+      res.status(500).json({ error: "Failed to research component." });
     }
   });
 

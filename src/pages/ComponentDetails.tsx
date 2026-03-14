@@ -234,7 +234,7 @@ export function ComponentDetails() {
             <div className="aspect-video w-full relative bg-slate-100 dark:bg-slate-800 rounded-t-3xl overflow-hidden">
               <img
                 alt={component.name}
-                className="w-full h-full object-cover"
+                className="absolute inset-0 w-full h-full object-contain p-4"
                 src={component.main_image ? getFileUrl(component.main_image) : "https://via.placeholder.com/800x400?text=No+Image"}
               />
               <div className="absolute top-4 right-4 flex gap-2">
