@@ -1047,7 +1047,7 @@ export function AddComponent() {
 
         // 3. Create or Update Component
         const componentData: any = {
-          name: isBatchMode ? `${formData.name} (${item.value})` : formData.name,
+          name: isBatchMode ? `${formData.name} (${item.value}${item.unit ? ' ' + item.unit : ''})` : formData.name,
           description: formData.description,
           quantity_available: item.quantity,
           location: formData.storageLocation && formData.storageLocation !== "0" ? formData.storageLocation : null,
