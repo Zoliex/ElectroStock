@@ -16,13 +16,17 @@ import {
   Edit,
   Loader2,
   Zap,
+  Activity,
   Sparkles,
   Search,
   Globe,
   ArrowLeft,
   Save,
   ChevronDown,
-  Camera
+  Camera,
+  Layers,
+  Type,
+  Trash2
 } from "lucide-react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import BarcodeGenerator from "react-barcode";
@@ -31,6 +35,230 @@ import { toast } from "sonner";
 import { directus, Box, ComponentPackage, ComponentType, getFileUrl, Component } from "../lib/directus";
 import { readItems, uploadFiles, createItem, readItem, updateItem } from "@directus/sdk";
 import { BarcodeScanner } from "../components/BarcodeScanner";
+
+const COLOR_MAP: Record<number, string> = {
+  0: "#000000", // Black
+  1: "#8B4513", // Brown
+  2: "#FF0000", // Red
+  3: "#FF8C00", // Orange
+  4: "#FFFF00", // Yellow
+  5: "#008000", // Green
+  6: "#0000FF", // Blue
+  7: "#800080", // Violet
+  8: "#808080", // Gray
+  9: "#FFFFFF", // White
+};
+
+const MULTIPLIER_MAP: Record<number, string> = {
+  0: "#000000", // Black (1)
+  1: "#8B4513", // Brown (10)
+  2: "#FF0000", // Red (100)
+  3: "#FF8C00", // Orange (1k)
+  4: "#FFFF00", // Yellow (10k)
+  5: "#008000", // Green (100k)
+  6: "#0000FF", // Blue (1M)
+  7: "#800080", // Violet (10M)
+  8: "#808080", // Gray (100M)
+  9: "#FFFFFF", // White (1G)
+  [-1]: "#FFD700", // Gold (0.1)
+  [-2]: "#C0C0C0", // Silver (0.01)
+};
+
+const TOLERANCE_MAP: Record<string, string> = {
+  "1%": "#8B4513",   // Brown
+  "2%": "#FF0000",   // Red
+  "3%": "#FF8C00",   // Orange
+  "4%": "#FFFF00",   // Yellow
+  "0.5%": "#008000", // Green
+  "0.25%": "#0000FF",// Blue
+  "0.1%": "#800080", // Violet
+  "0.05%": "#808080",// Gray
+  "5%": "#FFD700",   // Gold
+  "10%": "#C0C0C0",  // Silver
+  "20%": "transparent", // None
+};
+
+const TEMPCO_MAP: Record<string, string> = {
+  "250ppm": "#000000", // Black
+  "100ppm": "#8B4513", // Brown
+  "50ppm": "#FF0000",  // Red
+  "15ppm": "#FF8C00",  // Orange
+  "25ppm": "#FFFF00",  // Yellow
+  "20ppm": "#008000",  // Green
+  "10ppm": "#0000FF",  // Blue
+  "5ppm": "#800080",   // Violet
+  "1ppm": "#808080",   // Gray
+};
+
+const parseElectronicValue = (val: string) => {
+  if (!val) return null;
+  const clean = val.replace(/\s/g, '').replace(/Ω/g, 'R').replace(/ohm/gi, 'R');
+  const match = clean.match(/^(\d+\.?\d*)([kMGµmnhR]?)(H|R)?$/i);
+  if (!match) return null;
+  
+  let num = parseFloat(match[1]);
+  const multiplier = match[2];
+  
+  switch(multiplier) {
+    case 'k':
+    case 'K': num *= 1000; break;
+    case 'M': num *= 1000000; break;
+    case 'G': num *= 1000000000; break;
+    case 'm': num /= 1000; break;
+    case 'µ': 
+    case 'u':
+    case 'U': num /= 1000000; break;
+    case 'n':
+    case 'N': num /= 1000000000; break;
+  }
+  return num;
+};
+
+const getResistorBands = (value: number, bandCount: number) => {
+  if (value <= 0) return [];
+  
+  let digits: number[] = [];
+  let multiplier = 0;
+  
+  const sigDigits = bandCount === 4 ? 2 : 3;
+  
+  let exp = Math.floor(Math.log10(value));
+  exp -= (sigDigits - 1);
+  
+  // Handle gold/silver multipliers
+  if (exp < -2) exp = -2;
+  if (exp > 9) exp = 9;
+  
+  let base = Math.round(value / Math.pow(10, exp));
+  
+  if (base >= Math.pow(10, sigDigits)) {
+    base /= 10;
+    exp += 1;
+  }
+  
+  const baseStr = base.toString().padStart(sigDigits, '0');
+  digits = baseStr.split('').map(Number);
+  multiplier = exp;
+  
+  return [...digits, multiplier];
+};
+
+const getInductorBands = (value: number) => {
+  if (value <= 0) return [];
+  
+  // value is in µH
+  if (value < 1) {
+    const val = Math.round(value * 100);
+    const d1 = Math.floor(val / 10);
+    const d2 = val % 10;
+    return [-1, d1, d2]; // Gold at pos 1 (Decimal)
+  } else if (value < 10) {
+    const d1 = Math.floor(value);
+    const d2 = Math.round((value - d1) * 10);
+    return [d1, -1, d2]; // Gold at pos 2 (Decimal)
+  } else {
+    return getResistorBands(value, 4);
+  }
+};
+
+const ResistorVisual = ({ value, unit, tolerance, tempCo, bandCount, svgRef }: { value: string, unit: string, tolerance: string, tempCo: string, bandCount: number, svgRef: React.RefObject<SVGSVGElement | null> }) => {
+  const fullValue = `${value}${unit}`;
+  const numValue = parseElectronicValue(fullValue);
+  const bands = numValue ? getResistorBands(numValue, bandCount) : [];
+  const font = "'Inter', system-ui, sans-serif";
+  const toleranceColor = TOLERANCE_MAP[tolerance] || "#FFD700";
+  const tempCoColor = TEMPCO_MAP[tempCo] || "#8B4513";
+  
+  return (
+    <div className="flex flex-col items-center gap-4 p-6 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-inner aspect-square justify-center">
+      <span className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">Resistor</span>
+      <svg ref={svgRef} width="240" height="240" viewBox="0 0 240 240" className="drop-shadow-md">
+        <defs>
+          <linearGradient id="resistorGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stopColor="#E6CCB2" />
+            <stop offset="50%" stopColor="#D2B48C" />
+            <stop offset="100%" stopColor="#B89B72" />
+          </linearGradient>
+          <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+            <feGaussianBlur in="SourceAlpha" stdDeviation="3" />
+            <feOffset dx="0" dy="2" result="offsetblur" />
+            <feComponentTransfer>
+              <feFuncA type="linear" slope="0.3" />
+            </feComponentTransfer>
+            <feMerge>
+              <feMergeNode />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
+        </defs>
+        <rect width="100%" height="100%" fill="white" />
+        {/* Leads */}
+        <line x1="0" y1="120" x2="240" y2="120" stroke="#A0A0A0" strokeWidth="12" />
+        {/* Body */}
+        <rect x="20" y="95" width="200" height="50" rx="15" fill="url(#resistorGradient)" filter="url(#shadow)" />
+        {/* Bands */}
+        {bands.map((digit, i) => {
+          const isMultiplier = i === (bandCount === 4 ? 2 : 3);
+          const color = isMultiplier ? MULTIPLIER_MAP[digit] : COLOR_MAP[digit];
+          const x = 40 + (i * 25);
+          return <rect key={i} x={x} y="95" width="10" height="50" fill={color || "#E0E0E0"} />;
+        })}
+        {/* Tolerance Band */}
+        <rect x="170" y="95" width="10" height="50" fill={toleranceColor} />
+        {/* TempCo Band */}
+        {bandCount === 6 && (
+          <rect x="190" y="95" width="10" height="50" fill={tempCoColor} />
+        )}
+        <text x="120" y="60" textAnchor="middle" fontFamily={font} fontSize="20" fontWeight="900" fill="#94a3b8" style={{ letterSpacing: '0.2em' }}>RESISTOR</text>
+        <text x="120" y="200" textAnchor="middle" fontFamily={font} fontSize="44" fontWeight="900" fill="#0f172a">{fullValue || "0Ω"}</text>
+        <text x="120" y="225" textAnchor="middle" fontFamily={font} fontSize="14" fontWeight="700" fill="#64748b">±{tolerance} {bandCount === 6 ? `(${tempCo})` : ''}</text>
+      </svg>
+      <span className="text-xl font-black text-slate-900 dark:text-white tracking-tight">{fullValue} ±{tolerance} {bandCount === 6 ? `(${tempCo})` : ''}</span>
+    </div>
+  );
+};
+
+const InductorVisual = ({ value, unit, tolerance, svgRef }: { value: string, unit: string, tolerance: string, svgRef: React.RefObject<SVGSVGElement | null> }) => {
+  const fullValue = `${value}${unit}`;
+  const numValue = parseElectronicValue(fullValue);
+  // Inductors use µH as base unit for color codes
+  const bands = numValue ? getInductorBands(numValue * 1000000) : [];
+  const font = "'Inter', system-ui, sans-serif";
+  const toleranceColor = TOLERANCE_MAP[tolerance] || "#C0C0C0";
+  
+  return (
+    <div className="flex flex-col items-center gap-4 p-6 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-inner aspect-square justify-center">
+      <span className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">Inductor</span>
+      <svg ref={svgRef} width="240" height="240" viewBox="0 0 240 240" className="drop-shadow-md">
+        <defs>
+          <linearGradient id="inductorGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stopColor="#B0F2B0" />
+            <stop offset="50%" stopColor="#90EE90" />
+            <stop offset="100%" stopColor="#70D070" />
+          </linearGradient>
+        </defs>
+        <rect width="100%" height="100%" fill="white" />
+        {/* Leads */}
+        <line x1="0" y1="120" x2="240" y2="120" stroke="#A0A0A0" strokeWidth="12" />
+        {/* Body - Usually light green for inductors */}
+        <rect x="20" y="95" width="200" height="50" rx="25" fill="url(#inductorGradient)" />
+        {/* Bands */}
+        {bands.map((digit, i) => {
+          // If it's a decimal point rule, digit might be -1 (Gold)
+          const color = digit === -1 ? "#FFD700" : (i === 2 && bands.length === 3 ? MULTIPLIER_MAP[digit] : COLOR_MAP[digit]);
+          const x = 40 + (i * 40);
+          return <rect key={i} x={x} y="95" width="15" height="50" fill={color || "#E0E0E0"} />;
+        })}
+        {/* Tolerance Band */}
+        <rect x="175" y="95" width="15" height="50" fill={toleranceColor} />
+        <text x="120" y="60" textAnchor="middle" fontFamily={font} fontSize="20" fontWeight="900" fill="#94a3b8" style={{ letterSpacing: '0.2em' }}>INDUCTOR</text>
+        <text x="120" y="200" textAnchor="middle" fontFamily={font} fontSize="44" fontWeight="900" fill="#0f172a">{fullValue || "0µH"}</text>
+        <text x="120" y="225" textAnchor="middle" fontFamily={font} fontSize="14" fontWeight="700" fill="#64748b">±{tolerance}</text>
+      </svg>
+      <span className="text-xl font-black text-slate-900 dark:text-white tracking-tight">{fullValue} ±{tolerance}</span>
+    </div>
+  );
+};
 
 export function AddComponent() {
   const navigate = useNavigate();
@@ -49,6 +277,51 @@ export function AddComponent() {
   const [isAiFilling, setIsAiFilling] = useState(false);
   const [settings, setSettings] = useState({ enableAiSuggestions: true });
   const [isSearchingImages, setIsSearchingImages] = useState(false);
+
+  // Resistor / Inductor Virtual Fields
+  const [isResistor, setIsResistor] = useState(false);
+  const [isInductor, setIsInductor] = useState(false);
+  const [bandCount, setBandCount] = useState(4);
+  const [resistorValue, setResistorValue] = useState("");
+  const [inductanceValue, setInductanceValue] = useState("");
+  const [tolerance, setTolerance] = useState("5%");
+  const [tempCo, setTempCo] = useState("100ppm");
+  const [resistorUnit, setResistorUnit] = useState("Ω");
+  const [inductorUnit, setInductorUnit] = useState("µH");
+  const [isBatchMode, setIsBatchMode] = useState(false);
+  const [batchItems, setBatchItems] = useState<{ value: string; quantity: number }[]>([{ value: "", quantity: 1 }]);
+  const resistorSvgRef = useRef<SVGSVGElement>(null);
+  const inductorSvgRef = useRef<SVGSVGElement>(null);
+
+  const svgToBlob = (svgElement: SVGSVGElement): Promise<Blob> => {
+    return new Promise((resolve, reject) => {
+      try {
+        const svgData = new XMLSerializer().serializeToString(svgElement);
+        const canvas = document.createElement("canvas");
+        const ctx = canvas.getContext("2d");
+        const img = new Image();
+        img.onload = () => {
+          canvas.width = img.width * 2; // Higher res
+          canvas.height = img.height * 2;
+          if (ctx) {
+            ctx.fillStyle = "white"; // Background for PNG
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.scale(2, 2);
+            ctx.drawImage(img, 0, 0);
+          }
+          canvas.toBlob((blob) => {
+            if (blob) resolve(blob);
+            else reject(new Error("Failed to create blob"));
+          }, "image/png");
+        };
+        img.onerror = () => reject(new Error("Failed to load SVG into image"));
+        img.src = "data:image/svg+xml;base64," + btoa(unescape(encodeURIComponent(svgData)));
+      } catch (e) {
+        reject(e);
+      }
+    });
+  };
+
   const [searchResults, setSearchResults] = useState<{ url: string; title: string }[]>([]);
   const [showImageSearchModal, setShowImageSearchModal] = useState<{ type: 'main' | 'additional' | 'datasheet', query: string } | null>(null);
 
@@ -541,14 +814,175 @@ export function AddComponent() {
     }
   };
 
+  const getResistorSvgString = (value: string, unit: string, tolerance: string, tempCo: string, bandsCount: number) => {
+    const fullValue = `${value}${unit}`;
+    const numValue = parseElectronicValue(fullValue);
+    const bands = numValue ? getResistorBands(numValue, bandsCount) : [];
+    const font = "'Inter', system-ui, sans-serif";
+    const toleranceColor = TOLERANCE_MAP[tolerance] || "#FFD700";
+    const tempCoColor = TEMPCO_MAP[tempCo] || "#8B4513";
+    
+    return `
+      <svg xmlns="http://www.w3.org/2000/svg" width="240" height="240" viewBox="0 0 240 240">
+        <defs>
+          <linearGradient id="resistorBodyGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stop-color="#f5e6d3" />
+            <stop offset="20%" stop-color="#e6ccb2" />
+            <stop offset="50%" stop-color="#d2b48c" />
+            <stop offset="80%" stop-color="#b89b72" />
+            <stop offset="100%" stop-color="#a68a64" />
+          </linearGradient>
+          <linearGradient id="leadGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stop-color="#d1d5db" />
+            <stop offset="50%" stop-color="#94a3b8" />
+            <stop offset="100%" stop-color="#64748b" />
+          </linearGradient>
+          <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+            <feGaussianBlur in="SourceAlpha" stdDeviation="3" />
+            <feOffset dx="0" dy="2" result="offsetblur" />
+            <feComponentTransfer>
+              <feFuncA type="linear" slope="0.3" />
+            </feComponentTransfer>
+            <feMerge>
+              <feMergeNode />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
+        </defs>
+        <rect width="100%" height="100%" fill="white"/>
+        
+        <!-- Leads -->
+        <rect x="0" y="116" width="240" height="8" fill="url(#leadGrad)" rx="4" />
+        
+        <!-- Body Shadow -->
+        <rect x="20" y="95" width="200" height="50" rx="15" fill="black" opacity="0.1" transform="translate(0, 4)" />
+        
+        <!-- Body -->
+        <rect x="20" y="95" width="200" height="50" rx="15" fill="url(#resistorBodyGrad)" stroke="#b89b72" stroke-width="1" />
+        
+        <!-- Bands -->
+        ${bands.map((digit, i) => {
+          const isMultiplier = i === (bandsCount === 4 ? 2 : 3);
+          const color = isMultiplier ? MULTIPLIER_MAP[digit] : COLOR_MAP[digit];
+          const x = 45 + (i * 25);
+          return `
+            <rect x="${x}" y="95" width="10" height="50" fill="${color || "#E0E0E0"}" />
+            <rect x="${x}" y="95" width="10" height="50" fill="white" opacity="0.1" />
+          `;
+        }).join('')}
+        
+        <!-- Tolerance Band -->
+        <rect x="170" y="95" width="10" height="50" fill="${toleranceColor}" />
+        <rect x="170" y="95" width="10" height="50" fill="white" opacity="0.1" />
+
+        <!-- TempCo Band -->
+        ${bandsCount === 6 ? `
+          <rect x="190" y="95" width="10" height="50" fill="${tempCoColor}" />
+          <rect x="190" y="95" width="10" height="50" fill="white" opacity="0.1" />
+        ` : ''}
+
+        <!-- Labels -->
+        <text x="120" y="55" text-anchor="middle" font-family="${font}" font-size="18" font-weight="900" fill="#94a3b8" style="letter-spacing: 0.3em">RESISTOR</text>
+        <text x="120" y="200" text-anchor="middle" font-family="${font}" font-size="44" font-weight="900" fill="#0f172a">${fullValue}</text>
+        <text x="120" y="225" text-anchor="middle" font-family="${font}" font-size="16" font-weight="700" fill="#64748b">±${tolerance} ${bandsCount === 6 ? `(${tempCo})` : ''}</text>
+      </svg>
+    `;
+  };
+
+  const getInductorSvgString = (value: string, unit: string, tolerance: string) => {
+    const fullValue = `${value}${unit}`;
+    const numValue = parseElectronicValue(fullValue);
+    // Inductors use µH as base unit for color codes
+    const bands = numValue ? getInductorBands(numValue * 1000000) : [];
+    const font = "'Inter', system-ui, sans-serif";
+    const toleranceColor = TOLERANCE_MAP[tolerance] || "#C0C0C0";
+    
+    return `
+      <svg xmlns="http://www.w3.org/2000/svg" width="240" height="240" viewBox="0 0 240 240">
+        <defs>
+          <linearGradient id="inductorBodyGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stop-color="#bbf7bb" />
+            <stop offset="20%" stop-color="#90ee90" />
+            <stop offset="50%" stop-color="#70d070" />
+            <stop offset="80%" stop-color="#4ade80" />
+            <stop offset="100%" stop-color="#22c55e" />
+          </linearGradient>
+          <linearGradient id="leadGradInd" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stop-color="#d1d5db" />
+            <stop offset="50%" stop-color="#94a3b8" />
+            <stop offset="100%" stop-color="#64748b" />
+          </linearGradient>
+        </defs>
+        <rect width="100%" height="100%" fill="white"/>
+        
+        <!-- Leads -->
+        <rect x="0" y="116" width="240" height="8" fill="url(#leadGradInd)" rx="4" />
+        
+        <!-- Body Shadow -->
+        <rect x="20" y="95" width="200" height="50" rx="25" fill="black" opacity="0.1" transform="translate(0, 4)" />
+        
+        <!-- Body -->
+        <rect x="20" y="95" width="200" height="50" rx="25" fill="url(#inductorBodyGrad)" stroke="#16a34a" stroke-width="1" />
+        
+        <!-- Bands -->
+        ${bands.map((digit, i) => {
+          const color = digit === -1 ? "#FFD700" : (i === 2 && bands.length === 3 ? MULTIPLIER_MAP[digit] : COLOR_MAP[digit]);
+          const x = 50 + (i * 35);
+          return `
+            <rect x="${x}" y="95" width="12" height="50" fill="${color || "#E0E0E0"}" />
+            <rect x="${x}" y="95" width="12" height="50" fill="white" opacity="0.1" />
+          `;
+        }).join('')}
+        
+        <!-- Tolerance Band -->
+        <rect x="170" y="95" width="12" height="50" fill="${toleranceColor}" />
+        <rect x="170" y="95" width="12" height="50" fill="white" opacity="0.1" />
+
+        <!-- Labels -->
+        <text x="120" y="55" text-anchor="middle" font-family="${font}" font-size="18" font-weight="900" fill="#94a3b8" style="letter-spacing: 0.3em">INDUCTOR</text>
+        <text x="120" y="200" text-anchor="middle" font-family="${font}" font-size="44" font-weight="900" fill="#0f172a">${fullValue}</text>
+        <text x="120" y="225" text-anchor="middle" font-family="${font}" font-size="16" font-weight="700" fill="#64748b">±${tolerance}</text>
+      </svg>
+    `;
+  };
+
+  const svgStringToBlob = (svgString: string): Promise<Blob> => {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      const svg = new Blob([svgString], {type: 'image/svg+xml;charset=utf-8'});
+      const url = URL.createObjectURL(svg);
+      const canvas = document.createElement("canvas");
+      const ctx = canvas.getContext("2d");
+      
+      img.onload = () => {
+        canvas.width = 400;
+        canvas.height = 400;
+        if (ctx) {
+          ctx.fillStyle = "white";
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+          // Center the 240x240 SVG in the 400x400 canvas
+          ctx.drawImage(img, 80, 80, 240, 240);
+        }
+        canvas.toBlob((blob) => {
+          URL.revokeObjectURL(url);
+          if (blob) resolve(blob);
+          else reject(new Error("Blob creation failed"));
+        }, "image/png");
+      };
+      img.onerror = () => reject(new Error("Image load failed"));
+      img.src = url;
+    });
+  };
+
   const handleSave = async () => {
     // Validation
+    const isProcedural = isResistor || isInductor;
     if (!formData.name || !formData.category || !formData.description || tags.length === 0 || !formData.storageLocation) {
       toast.error("Please fill in all required fields (Name, Category, Description, Keywords, Storage Location).");
       return;
     }
 
-    if (!isEditMode && !mainImage && !existingMainImage) {
+    if (!isProcedural && !mainImage && !existingMainImage) {
       toast.error("Please upload a main image.");
       return;
     }
@@ -556,88 +990,116 @@ export function AddComponent() {
     setIsSaving(true);
     const toastId = toast.loading(isEditMode ? "Updating component..." : "Saving component...");
     try {
-      let mainImageId = existingMainImage;
-      let datasheetId = existingDatasheet;
+      const itemsToSave = isBatchMode 
+        ? batchItems.filter(i => i.value.trim())
+        : [{ 
+            value: isResistor ? resistorValue : (isInductor ? inductanceValue : ""), 
+            quantity: Number(formData.quantity) 
+          }];
 
-      // 1. Upload Main Image if new one selected
-      if (mainImage) {
-        const mainImageFormData = new FormData();
-        mainImageFormData.append('file', mainImage);
-        const mainImageRes = await directus.request(uploadFiles(mainImageFormData));
-        mainImageId = (mainImageRes as any).id;
+      if (itemsToSave.length === 0) {
+        throw new Error("No items to save. Please add at least one value.");
       }
 
-      // 2. Upload Datasheet if new one selected
-      if (datasheet) {
-        const datasheetFormData = new FormData();
-        datasheetFormData.append('file', datasheet);
-        const datasheetRes = await directus.request(uploadFiles(datasheetFormData));
-        datasheetId = (datasheetRes as any).id;
-      }
+      for (const item of itemsToSave) {
+        let mainImageId = existingMainImage;
+        let datasheetId = existingDatasheet;
 
-      // 3. Create or Update Component
-      const componentData: any = {
-        name: formData.name,
-        description: formData.description,
-        quantity_available: Number(formData.quantity),
-        location: formData.storageLocation && formData.storageLocation !== "0" ? formData.storageLocation : null,
-        url: formData.referenceUrl || null,
-        keywords: tags,
-        packet_reference: formData.packetReference || null,
-        package: formData.pkg && formData.pkg !== "0" ? Number(formData.pkg) : null,
-        type: formData.category && formData.category !== "0" ? Number(formData.category) : null,
-        barcode: barcodes.length > 0 ? barcodes.join(';') : null,
-      };
-
-      if (mainImageId) {
-        componentData.main_image = mainImageId;
-      }
-      if (datasheetId) {
-        componentData.datasheet = datasheetId;
-      }
-
-      let componentId = id ? Number(id) : null;
-
-      if (isEditMode && id) {
-        await directus.request(updateItem('components', Number(id), componentData));
-      } else {
-        const newComponentRes = await directus.request(createItem('components', componentData));
-        componentId = (newComponentRes as any).id;
-      }
-
-      // 4. Upload Additional Images & Create Relations
-      if (additionalImages.length > 0 && componentId) {
-        for (const file of additionalImages) {
-          const fileData = new FormData();
-          fileData.append('file', file);
-          const fileRes = await directus.request(uploadFiles(fileData));
+        // 1. Generate and Upload Procedural Image if needed
+        if (isProcedural) {
+          const svgString = isResistor 
+            ? getResistorSvgString(item.value, resistorUnit, tolerance, tempCo, bandCount) 
+            : getInductorSvgString(item.value, inductorUnit, tolerance);
           
-          await directus.request(createItem('components_files', {
-            components_id: componentId,
-            directus_files_id: (fileRes as any).id
-          }));
+          const blob = await svgStringToBlob(svgString);
+          const file = new File([blob], `${item.value.replace(/[^a-z0-9]/gi, '_')}.png`, { type: "image/png" });
+          
+          const imageFormData = new FormData();
+          imageFormData.append('file', file);
+          const imageRes = await directus.request(uploadFiles(imageFormData));
+          mainImageId = (imageRes as any).id;
+          // Duplicate as datasheet
+          datasheetId = mainImageId;
+        } else if (mainImage) {
+          // Upload Main Image if new one selected
+          const mainImageFormData = new FormData();
+          mainImageFormData.append('file', mainImage);
+          const mainImageRes = await directus.request(uploadFiles(mainImageFormData));
+          mainImageId = (mainImageRes as any).id;
+        }
+
+        // 2. Upload Datasheet if new one selected (only if not procedural)
+        if (datasheet && !isProcedural) {
+          const datasheetFormData = new FormData();
+          datasheetFormData.append('file', datasheet);
+          const datasheetRes = await directus.request(uploadFiles(datasheetFormData));
+          datasheetId = (datasheetRes as any).id;
+        }
+
+        // 3. Create or Update Component
+        const componentData: any = {
+          name: isBatchMode ? `${formData.name} (${item.value})` : formData.name,
+          description: formData.description,
+          quantity_available: item.quantity,
+          location: formData.storageLocation && formData.storageLocation !== "0" ? formData.storageLocation : null,
+          url: formData.referenceUrl || null,
+          keywords: [...tags, ...(isResistor ? ['resistor', item.value] : (isInductor ? ['inductor', item.value] : []))],
+          packet_reference: formData.packetReference || null,
+          package: formData.pkg && formData.pkg !== "0" ? Number(formData.pkg) : null,
+          type: formData.category && formData.category !== "0" ? Number(formData.category) : null,
+          barcode: barcodes.length > 0 ? barcodes.join(';') : null,
+        };
+
+        if (mainImageId) {
+          componentData.main_image = mainImageId;
+        }
+        if (datasheetId) {
+          componentData.datasheet = datasheetId;
+        }
+
+        let componentId = id ? Number(id) : null;
+
+        if (isEditMode && id && !isBatchMode) {
+          await directus.request(updateItem('components', Number(id), componentData));
+        } else {
+          const newComponentRes = await directus.request(createItem('components', componentData));
+          componentId = (newComponentRes as any).id;
+        }
+
+        // 4. Upload Additional Images & Create Relations
+        if (additionalImages.length > 0 && componentId) {
+          for (const file of additionalImages) {
+            const fileData = new FormData();
+            fileData.append('file', file);
+            const fileRes = await directus.request(uploadFiles(fileData));
+            
+            await directus.request(createItem('components_files', {
+              components_id: componentId,
+              directus_files_id: (fileRes as any).id
+            }));
+          }
+        }
+
+        // 5. Upload Additional Files & Create Relations
+        if (additionalFiles.length > 0 && componentId) {
+          for (const file of additionalFiles) {
+            const fileData = new FormData();
+            fileData.append('file', file);
+            const fileRes = await directus.request(uploadFiles(fileData));
+            
+            await directus.request(createItem('components_files_1', {
+              components_id: componentId,
+              directus_files_id: (fileRes as any).id
+            }));
+          }
         }
       }
 
-      // 5. Upload Additional Files & Create Relations
-      if (additionalFiles.length > 0 && componentId) {
-        for (const file of additionalFiles) {
-          const fileData = new FormData();
-          fileData.append('file', file);
-          const fileRes = await directus.request(uploadFiles(fileData));
-          
-          await directus.request(createItem('components_files_1', {
-            components_id: componentId,
-            directus_files_id: (fileRes as any).id
-          }));
-        }
-      }
-
-      toast.success(isEditMode ? "Component updated successfully!" : "Component saved successfully!", { id: toastId });
+      toast.success(isEditMode && !isBatchMode ? "Component updated successfully!" : `Successfully saved ${itemsToSave.length} component(s)!`, { id: toastId });
       navigate("/inventory");
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error saving component:", error);
-      toast.error("Failed to save component. Please check the console for details.", { id: toastId });
+      toast.error(error.message || "Failed to save component.", { id: toastId });
     } finally {
       setIsSaving(false);
     }
@@ -684,6 +1146,197 @@ export function AddComponent() {
                   <h2 className="text-lg font-bold text-slate-900 dark:text-white">Technical Information</h2>
                 </div>
                 <div className="space-y-6">
+                  {/* Virtual Fields for Resistors/Inductors */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700">
+                    <button
+                      type="button"
+                      onClick={() => { setIsResistor(!isResistor); setIsInductor(false); }}
+                      className={`flex items-center justify-center gap-2 p-3 rounded-lg border transition-all ${isResistor ? 'bg-primary text-white border-primary shadow-md' : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-800'}`}
+                    >
+                      <Zap className="w-4 h-4" />
+                      <span className="text-xs font-bold uppercase tracking-wider">Resistor Mode</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setIsInductor(!isInductor); setIsResistor(false); }}
+                      className={`flex items-center justify-center gap-2 p-3 rounded-lg border transition-all ${isInductor ? 'bg-primary text-white border-primary shadow-md' : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-800'}`}
+                    >
+                      <Activity className="w-4 h-4" />
+                      <span className="text-xs font-bold uppercase tracking-wider">Inductor Mode</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setIsBatchMode(!isBatchMode)}
+                      className={`flex items-center justify-center gap-2 p-3 rounded-lg border transition-all ${isBatchMode ? 'bg-orange-500 text-white border-orange-500 shadow-md' : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-800'}`}
+                    >
+                      <Layers className="w-4 h-4" />
+                      <span className="text-xs font-bold uppercase tracking-wider">Batch Entry</span>
+                    </button>
+                  </div>
+
+                  {/* Dynamic Inputs */}
+                  {(isResistor || isInductor) && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-6 bg-primary/5 rounded-xl border border-primary/20 animate-in fade-in slide-in-from-top-2 duration-300">
+                      {isResistor && (
+                        <>
+                          <div className="flex flex-col gap-2">
+                            <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Band Count</label>
+                            <select 
+                              value={bandCount}
+                              onChange={(e) => setBandCount(Number(e.target.value))}
+                              className={`form-select w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white h-11 px-4 text-sm ${focusClasses}`}
+                            >
+                              <option value={4}>4 Bands</option>
+                              <option value={5}>5 Bands</option>
+                              <option value={6}>6 Bands</option>
+                            </select>
+                          </div>
+                          <div className="flex flex-col gap-2">
+                            <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Tolerance</label>
+                            <select 
+                              value={tolerance}
+                              onChange={(e) => setTolerance(e.target.value)}
+                              className={`form-select w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white h-11 px-4 text-sm ${focusClasses}`}
+                            >
+                              {Object.keys(TOLERANCE_MAP).map(t => (
+                                <option key={t} value={t}>{t}</option>
+                              ))}
+                            </select>
+                          </div>
+                          {bandCount === 6 && (
+                            <div className="flex flex-col gap-2">
+                              <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">TempCo</label>
+                              <select 
+                                value={tempCo}
+                                onChange={(e) => setTempCo(e.target.value)}
+                                className={`form-select w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white h-11 px-4 text-sm ${focusClasses}`}
+                              >
+                                {Object.keys(TEMPCO_MAP).map(t => (
+                                  <option key={t} value={t}>{t}</option>
+                                ))}
+                              </select>
+                            </div>
+                          )}
+                          {!isBatchMode && (
+                            <div className="flex flex-col gap-2">
+                              <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Resistance Value</label>
+                              <div className="flex gap-2">
+                                <input 
+                                  value={resistorValue}
+                                  onChange={(e) => setResistorValue(e.target.value)}
+                                  placeholder="e.g. 4.7, 100, 1"
+                                  className={`form-input flex-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white h-11 px-4 text-sm ${focusClasses}`}
+                                />
+                                <select
+                                  value={resistorUnit}
+                                  onChange={(e) => setResistorUnit(e.target.value)}
+                                  className={`form-select w-24 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white h-11 px-2 text-sm ${focusClasses}`}
+                                >
+                                  <option value="Ω">Ω</option>
+                                  <option value="kΩ">kΩ</option>
+                                  <option value="MΩ">MΩ</option>
+                                </select>
+                              </div>
+                            </div>
+                          )}
+                        </>
+                      )}
+                      {isInductor && (
+                        <>
+                          <div className="flex flex-col gap-2">
+                            <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Tolerance</label>
+                            <select 
+                              value={tolerance}
+                              onChange={(e) => setTolerance(e.target.value)}
+                              className={`form-select w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white h-11 px-4 text-sm ${focusClasses}`}
+                            >
+                              {Object.keys(TOLERANCE_MAP).map(t => (
+                                <option key={t} value={t}>{t}</option>
+                              ))}
+                            </select>
+                          </div>
+                          {!isBatchMode && (
+                            <div className="flex flex-col gap-2">
+                              <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Inductance Value</label>
+                              <div className="flex gap-2">
+                                <input 
+                                  value={inductanceValue}
+                                  onChange={(e) => setInductanceValue(e.target.value)}
+                                  placeholder="e.g. 10, 100, 1"
+                                  className={`form-input flex-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white h-11 px-4 text-sm ${focusClasses}`}
+                                />
+                                <select
+                                  value={inductorUnit}
+                                  onChange={(e) => setInductorUnit(e.target.value)}
+                                  className={`form-select w-24 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white h-11 px-2 text-sm ${focusClasses}`}
+                                >
+                                  <option value="nH">nH</option>
+                                  <option value="µH">µH</option>
+                                  <option value="mH">mH</option>
+                                  <option value="H">H</option>
+                                </select>
+                              </div>
+                            </div>
+                          )}
+                        </>
+                      )}
+                    {isBatchMode && (
+                      <div className="md:col-span-2 space-y-4">
+                        <div className="flex justify-between items-center">
+                          <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Batch Items</label>
+                          <button 
+                            type="button"
+                            onClick={() => setBatchItems([...batchItems, { value: "", quantity: 1 }])}
+                            className="flex items-center gap-1 text-xs font-bold text-primary hover:underline"
+                          >
+                            <Plus className="w-3 h-3" /> Add Item
+                          </button>
+                        </div>
+                        <div className="space-y-3">
+                          {batchItems.map((item, index) => (
+                            <div key={index} className="flex gap-3 items-end animate-in fade-in slide-in-from-left-2 duration-200">
+                              <div className="flex-1 flex flex-col gap-1.5">
+                                <label className="text-[10px] uppercase font-bold text-slate-400">Value</label>
+                                <input 
+                                  value={item.value}
+                                  onChange={(e) => {
+                                    const newItems = [...batchItems];
+                                    newItems[index].value = e.target.value;
+                                    setBatchItems(newItems);
+                                  }}
+                                  placeholder="e.g. 10k"
+                                  className={`form-input w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white h-10 px-3 text-sm ${focusClasses}`}
+                                />
+                              </div>
+                              <div className="w-24 flex flex-col gap-1.5">
+                                <label className="text-[10px] uppercase font-bold text-slate-400">Qty</label>
+                                <input 
+                                  type="number"
+                                  value={item.quantity}
+                                  onChange={(e) => {
+                                    const newItems = [...batchItems];
+                                    newItems[index].quantity = parseInt(e.target.value) || 0;
+                                    setBatchItems(newItems);
+                                  }}
+                                  className={`form-input w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white h-10 px-3 text-sm ${focusClasses}`}
+                                />
+                              </div>
+                              <button 
+                                type="button"
+                                onClick={() => setBatchItems(batchItems.filter((_, i) => i !== index))}
+                                disabled={batchItems.length === 1}
+                                className="h-10 w-10 flex items-center justify-center rounded-lg bg-red-50 text-red-500 hover:bg-red-100 disabled:opacity-30 transition-colors"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                   <div className="flex flex-col gap-2">
                     <div className="flex justify-between items-center">
                       <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Name <span className="text-red-500">*</span></label>
@@ -867,40 +1520,58 @@ export function AddComponent() {
                         <span className="text-[10px] font-bold uppercase tracking-wider">Search Web</span>
                       </button>
                     </div>
-                    <div 
-                      onClick={() => mainImageRef.current?.click()}
-                      className="flex flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 p-6 hover:border-primary hover:bg-primary/5 transition-all group cursor-pointer min-h-[140px]"
-                    >
-                      {mainImage ? (
-                        <div className="flex flex-col items-center text-primary w-full">
-                          <img 
-                            src={URL.createObjectURL(mainImage)} 
-                            alt="Main preview" 
-                            className="w-full h-32 object-contain rounded-lg mb-2" 
-                          />
-                          <p className="text-sm font-bold text-center truncate w-full px-4">{mainImage.name}</p>
-                          <p className="text-xs opacity-70 mt-1">Click to replace</p>
-                        </div>
-                      ) : existingMainImage ? (
-                        <div className="flex flex-col items-center text-primary w-full">
-                          <img 
-                            src={getFileUrl(existingMainImage)} 
-                            alt="Existing Main" 
-                            className="w-full h-32 object-contain rounded-lg mb-2" 
-                          />
-                          <p className="text-sm font-bold text-center truncate w-full px-4">Current Image</p>
-                          <p className="text-xs opacity-70 mt-1">Click to replace</p>
-                        </div>
-                      ) : (
-                        <>
-                          <ImageIcon className="w-8 h-8 text-slate-400 group-hover:text-primary transition-colors" />
-                          <div className="text-center">
-                            <p className="text-sm font-bold text-slate-700 dark:text-slate-200 group-hover:text-primary transition-colors">Upload Main Image</p>
-                            <p className="text-xs text-slate-500 mt-1">PNG, JPG up to 5MB</p>
+                    {isResistor ? (
+                      <ResistorVisual 
+                        value={isBatchMode ? "Batch Mode" : resistorValue} 
+                        unit={resistorUnit}
+                        tolerance={tolerance}
+                        tempCo={tempCo}
+                        bandCount={bandCount} 
+                        svgRef={resistorSvgRef} 
+                      />
+                    ) : isInductor ? (
+                      <InductorVisual 
+                        value={isBatchMode ? "Batch Mode" : inductanceValue} 
+                        unit={inductorUnit}
+                        tolerance={tolerance}
+                        svgRef={inductorSvgRef} 
+                      />
+                    ) : (
+                      <div 
+                        onClick={() => mainImageRef.current?.click()}
+                        className="flex flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 p-6 hover:border-primary hover:bg-primary/5 transition-all group cursor-pointer min-h-[140px]"
+                      >
+                        {mainImage ? (
+                          <div className="flex flex-col items-center text-primary w-full">
+                            <img 
+                              src={URL.createObjectURL(mainImage)} 
+                              alt="Main preview" 
+                              className="w-full h-32 object-contain rounded-lg mb-2" 
+                            />
+                            <p className="text-sm font-bold text-center truncate w-full px-4">{mainImage.name}</p>
+                            <p className="text-xs opacity-70 mt-1">Click to replace</p>
                           </div>
-                        </>
-                      )}
-                    </div>
+                        ) : existingMainImage ? (
+                          <div className="flex flex-col items-center text-primary w-full">
+                            <img 
+                              src={getFileUrl(existingMainImage)} 
+                              alt="Existing Main" 
+                              className="w-full h-32 object-contain rounded-lg mb-2" 
+                            />
+                            <p className="text-sm font-bold text-center truncate w-full px-4">Current Image</p>
+                            <p className="text-xs opacity-70 mt-1">Click to replace</p>
+                          </div>
+                        ) : (
+                          <>
+                            <ImageIcon className="w-8 h-8 text-slate-400 group-hover:text-primary transition-colors" />
+                            <div className="text-center">
+                              <p className="text-sm font-bold text-slate-700 dark:text-slate-200 group-hover:text-primary transition-colors">Upload Main Image</p>
+                              <p className="text-xs text-slate-500 mt-1">PNG, JPG up to 5MB</p>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    )}
                     <input type="file" hidden ref={mainImageRef} accept="image/*" onChange={(e) => handleSingleFile(e, setMainImage)} />
                   </div>
 
