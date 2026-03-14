@@ -23,8 +23,15 @@ async function startServer() {
 
   app.use(express.json());
 
+  // Request logging middleware
+  app.use((req, res, next) => {
+    console.log(`[Request] ${req.method} ${req.url}`);
+    next();
+  });
+
   // Settings API
   app.get("/api/settings", (req, res) => {
+    console.log("[API] GET /api/settings");
     try {
       if (fs.existsSync(SETTINGS_FILE)) {
         const data = fs.readFileSync(SETTINGS_FILE, 'utf-8');
@@ -33,17 +40,20 @@ async function startServer() {
         res.json(defaultSettings);
       }
     } catch (error) {
+      console.error("[API] Error reading settings:", error);
       res.status(500).json({ error: "Failed to read settings" });
     }
   });
 
   app.post("/api/settings", (req, res) => {
+    console.log("[API] POST /api/settings", req.body);
     try {
       const currentSettings = fs.existsSync(SETTINGS_FILE) ? JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf-8')) : defaultSettings;
       const newSettings = { ...currentSettings, ...req.body };
       fs.writeFileSync(SETTINGS_FILE, JSON.stringify(newSettings, null, 2));
       res.json({ success: true, settings: newSettings });
     } catch (error) {
+      console.error("[API] Error saving settings:", error);
       res.status(500).json({ error: "Failed to save settings" });
     }
   });
@@ -51,12 +61,14 @@ async function startServer() {
   // SerpApi Image Search Proxy Route
   app.get("/api/search-images", async (req, res) => {
     const { q } = req.query;
+    console.log(`[API] GET /api/search-images?q=${q}`);
 
     if (!q) {
       return res.status(400).json({ error: "Query parameter 'q' is required" });
     }
 
     if (!process.env.SERPAPI_API_KEY) {
+      console.error("[API] SerpApi key not configured");
       return res.status(500).json({ error: "SerpApi key not configured" });
     }
 
@@ -78,7 +90,7 @@ async function startServer() {
       }
       return res.json([]);
     } catch (error: any) {
-      console.error("SerpApi failed", error.message);
+      console.error("[API] SerpApi failed", error.message);
       res.status(500).json({ error: "Failed to fetch images." });
     }
   });
@@ -86,6 +98,7 @@ async function startServer() {
   // AI Research Route
   app.post("/api/ai-research", async (req, res) => {
     const { name, context, categoriesInfo, packagesInfo, apiKey } = req.body;
+    console.log(`[API] POST /api/ai-research for component: ${name}`);
 
     if (!name) {
       return res.status(400).json({ error: "Component name is required" });
@@ -93,6 +106,7 @@ async function startServer() {
 
     const keyToUse = apiKey || process.env.GEMINI_API_KEY;
     if (!keyToUse) {
+      console.error("[API] Gemini API key not configured");
       return res.status(500).json({ error: "Gemini API key not configured" });
     }
 
@@ -146,7 +160,7 @@ async function startServer() {
 
       res.json(data);
     } catch (error: any) {
-      console.error("AI Research failed", error);
+      console.error("[API] AI Research failed", error);
       res.status(500).json({ error: "Failed to research component." });
     }
   });
