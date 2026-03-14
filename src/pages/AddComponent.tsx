@@ -301,12 +301,13 @@ export function AddComponent() {
         const ctx = canvas.getContext("2d");
         const img = new Image();
         img.onload = () => {
-          canvas.width = img.width * 2; // Higher res
-          canvas.height = img.height * 2;
+          canvas.width = 800;
+          canvas.height = 800;
           if (ctx) {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            ctx.scale(2, 2);
-            ctx.drawImage(img, 0, 0);
+            ctx.fillStyle = "white";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            // Scale 240x240 SVG to 800x800
+            ctx.drawImage(img, 0, 0, 800, 800);
           }
           canvas.toBlob((blob) => {
             if (blob) resolve(blob);
@@ -544,6 +545,7 @@ export function AddComponent() {
   };
 
   const [isSaving, setIsSaving] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<{ current: number; total: number } | null>(null);
 
   // Modal States
   const [showCategoryModal, setShowCategoryModal] = useState(false);
@@ -848,7 +850,7 @@ export function AddComponent() {
             </feMerge>
           </filter>
         </defs>
-        <rect width="100%" height="100%" fill="none"/>
+        <rect width="100%" height="100%" fill="white"/>
         
         <!-- Leads -->
         <rect x="0" y="116" width="240" height="8" fill="url(#leadGrad)" rx="4" />
@@ -912,7 +914,7 @@ export function AddComponent() {
             <stop offset="100%" stop-color="#64748b" />
           </linearGradient>
         </defs>
-        <rect width="100%" height="100%" fill="none"/>
+        <rect width="100%" height="100%" fill="white"/>
         
         <!-- Leads -->
         <rect x="0" y="116" width="240" height="8" fill="url(#leadGradInd)" rx="4" />
@@ -954,13 +956,13 @@ export function AddComponent() {
       const ctx = canvas.getContext("2d");
       
       img.onload = () => {
-        canvas.width = 400;
-        canvas.height = 400;
+        canvas.width = 800;
+        canvas.height = 800;
         if (ctx) {
-          // Transparent background
-          ctx.clearRect(0, 0, canvas.width, canvas.height);
-          // Center the 240x240 SVG in the 400x400 canvas
-          ctx.drawImage(img, 80, 80, 240, 240);
+          ctx.fillStyle = "white";
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+          // Scale 240x240 SVG to 800x800
+          ctx.drawImage(img, 0, 0, 800, 800);
         }
         canvas.toBlob((blob) => {
           URL.revokeObjectURL(url);
@@ -1001,7 +1003,13 @@ export function AddComponent() {
         throw new Error("No items to save. Please add at least one value.");
       }
 
+      const total = itemsToSave.length;
+      let current = 0;
+      setUploadProgress({ current: 0, total });
+
       for (const item of itemsToSave) {
+        current++;
+        setUploadProgress({ current, total });
         let mainImageId = existingMainImage;
         let datasheetId = existingDatasheet;
 
@@ -1103,6 +1111,7 @@ export function AddComponent() {
       toast.error(error.message || "Failed to save component.", { id: toastId });
     } finally {
       setIsSaving(false);
+      setUploadProgress(null);
     }
   };
 
@@ -1120,7 +1129,20 @@ export function AddComponent() {
                 {isEditMode ? "Update the technical and logistical specifications." : "Enter the technical and logistical specifications for the new component."}
               </p>
             </div>
-            <div className="flex gap-3">
+            <div className="flex items-center gap-3">
+              {uploadProgress && (
+                <div className="hidden sm:flex flex-col items-end gap-1 mr-2">
+                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                    Progress {uploadProgress.current} / {uploadProgress.total}
+                  </div>
+                  <div className="w-32 h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                    <div 
+                      className="h-full bg-primary transition-all duration-300" 
+                      style={{ width: `${(uploadProgress.current / uploadProgress.total) * 100}%` }}
+                    />
+                  </div>
+                </div>
+              )}
               <button
                 onClick={() => setShowCancelModal(true)}
                 className="flex min-w-[100px] cursor-pointer items-center justify-center rounded-xl h-10 px-5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-sm font-semibold hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
