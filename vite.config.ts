@@ -18,14 +18,7 @@ export default defineConfig(({mode}) => {
     server: {
       // HMR is disabled in AI Studio via DISABLE_HMR env var.
       // Do not modify—file watching is disabled to prevent flickering during agent edits.
-      hmr: process.env.DISABLE_HMR !== 'true',
-      proxy: {
-        '/directus': {
-          target: 'http://coqs.freeboxos.fr:16400',
-          changeOrigin: true,
-          rewrite: (path) => path.replace(/^\/directus/, ''),
-        },
-      },
+      hmr: process.env.DISABLE_HMR !== 'true'
     },
   };
 });

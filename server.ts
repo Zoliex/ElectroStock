@@ -5,6 +5,7 @@ import dotenv from "dotenv";
 import fs from "fs";
 import path from "path";
 import { GoogleGenAI, Type } from "@google/genai";
+import { createProxyMiddleware } from "http-proxy-middleware";
 
 dotenv.config();
 
@@ -21,13 +22,37 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  app.use(express.json());
-
   // Request logging middleware
   app.use((req, res, next) => {
     console.log(`[Request] ${req.method} ${req.url}`);
     next();
   });
+
+  // Proxy /directus requests to the Directus instance
+  app.use(
+    '/directus',
+    createProxyMiddleware({
+      target: 'http://coqs.freeboxos.fr:16400',
+      changeOrigin: true,
+      pathRewrite: {
+        '^/directus': '', // remove /directus prefix
+      },
+      on: {
+        proxyReq: (proxyReq, req, res) => {
+          console.log(`[Proxy] ${req.method} ${req.url} -> ${proxyReq.path}`);
+        },
+        proxyRes: (proxyRes, req, res) => {
+          console.log(`[Proxy Response] ${proxyRes.statusCode} ${req.url}`);
+        },
+        error: (err, req, res) => {
+          console.error(`[Proxy Error] ${req.method} ${req.url}`, err);
+        }
+      }
+    })
+  );
+
+  // Apply JSON body parsing ONLY to /api routes so it doesn't interfere with the proxy
+  app.use("/api", express.json());
 
   // Settings API
   app.get("/api/settings", (req, res) => {
