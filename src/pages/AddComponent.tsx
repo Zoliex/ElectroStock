@@ -47,6 +47,7 @@ export function AddComponent() {
   const [aiProposal, setAiProposal] = useState<{ category?: string, subcategory?: string, package?: string } | null>(null);
   const [previewMode, setPreviewMode] = useState(false);
   const [isAiFilling, setIsAiFilling] = useState(false);
+  const [settings, setSettings] = useState({ enableAiSuggestions: true });
   const [isSearchingImages, setIsSearchingImages] = useState(false);
   const [searchResults, setSearchResults] = useState<{ url: string; title: string }[]>([]);
   const [showImageSearchModal, setShowImageSearchModal] = useState<{ type: 'main' | 'additional' | 'datasheet', query: string } | null>(null);
@@ -158,6 +159,17 @@ export function AddComponent() {
 
     fetchOptions();
   }, [isEditMode, isCloneMode]);
+
+  useEffect(() => {
+    fetch("/api/settings")
+      .then(res => res.json())
+      .then(data => {
+        if (data && typeof data.enableAiSuggestions === 'boolean') {
+          setSettings(data);
+        }
+      })
+      .catch(err => console.error("Failed to load settings", err));
+  }, []);
 
   useEffect(() => {
     const fetchId = id || cloneId;
@@ -363,6 +375,7 @@ export function AddComponent() {
   };
 
   const handleAiFill = async () => {
+    if (!settings.enableAiSuggestions) return;
     if (!formData.name.trim()) {
       toast.error("Please enter a component name first");
       return;
@@ -674,14 +687,16 @@ export function AddComponent() {
                   <div className="flex flex-col gap-2">
                     <div className="flex justify-between items-center">
                       <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Name <span className="text-red-500">*</span></label>
-                      <button 
-                        onClick={handleAiFill}
-                        disabled={isAiFilling || !formData.name.trim()}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-primary/10 text-primary hover:bg-primary hover:text-white transition-all disabled:opacity-50 disabled:hover:bg-primary/10 disabled:hover:text-primary group"
-                      >
-                        {isAiFilling ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5 group-hover:animate-pulse" />}
-                        <span className="text-[11px] font-bold uppercase tracking-wider">Fill with AI</span>
-                      </button>
+                      {settings.enableAiSuggestions && (
+                        <button 
+                          onClick={handleAiFill}
+                          disabled={isAiFilling || !formData.name.trim()}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-primary/10 text-primary hover:bg-primary hover:text-white transition-all disabled:opacity-50 disabled:hover:bg-primary/10 disabled:hover:text-primary group"
+                        >
+                          {isAiFilling ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5 group-hover:animate-pulse" />}
+                          <span className="text-[11px] font-bold uppercase tracking-wider">Fill with AI</span>
+                        </button>
+                      )}
                     </div>
                     <input
                       name="name"
