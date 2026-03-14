@@ -1,10 +1,11 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Link, useSearchParams, useNavigate } from "react-router-dom";
 import { motion } from "motion/react";
-import { Download, Plus, Loader2, Package, Filter, ArrowUpDown, Search, X, AlertTriangle, ChevronLeft, ChevronRight, Layers, Camera } from "lucide-react";
+import { Download, Plus, Loader2, Package, Filter, ArrowUpDown, Search, X, AlertTriangle, ChevronLeft, ChevronRight, Layers, Camera, ChevronDown } from "lucide-react";
 import { directus, Component, getFileUrl, ComponentType, Box, ComponentPackage } from "../lib/directus";
 import { readItems, aggregate } from "@directus/sdk";
 import { BarcodeScanner } from "../components/BarcodeScanner";
+import { cn } from "../lib/utils";
 
 export function Inventory() {
   const [components, setComponents] = useState<Component[]>([]);
@@ -18,10 +19,25 @@ export function Inventory() {
   const searchQuery = searchParams.get("q") || "";
   const filterParam = searchParams.get("filter");
   const categoryParam = searchParams.get("category");
-
-  const [selectedCategory, setSelectedCategory] = useState<number | 'all'>(categoryParam ? Number(categoryParam) : 'all');
-  const [selectedLocation, setSelectedLocation] = useState<string | 'all'>('all');
-  const [selectedPackage, setSelectedPackage] = useState<number | 'all'>('all');
+  const locationParam = searchParams.get("location");
+  const packageParam = searchParams.get("package");
+  const [selectedCategories, setSelectedCategories] = useState<number[]>(
+    categoryParam ? categoryParam.split(',').map(Number).filter(n => !isNaN(n)) : []
+  );
+  const [isCategoryDropdownOpen, setIsCategoryDropdownOpen] = useState(false);
+  const categoryDropdownRef = useRef<HTMLDivElement>(null);
+  
+  const [selectedLocations, setSelectedLocations] = useState<string[]>(
+    locationParam ? locationParam.split(',') : []
+  );
+  const [isLocationDropdownOpen, setIsLocationDropdownOpen] = useState(false);
+  const locationDropdownRef = useRef<HTMLDivElement>(null);
+  
+  const [selectedPackages, setSelectedPackages] = useState<number[]>(
+    packageParam ? packageParam.split(',').map(Number).filter(n => !isNaN(n)) : []
+  );
+  const [isPackageDropdownOpen, setIsPackageDropdownOpen] = useState(false);
+  const packageDropdownRef = useRef<HTMLDivElement>(null);
   const [sortBy, setSortBy] = useState<'name' | 'quantity' | 'date'>('date');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [showFilters, setShowFilters] = useState(false);
@@ -34,13 +50,41 @@ export function Inventory() {
 
   useEffect(() => {
     if (categoryParam) {
-      setSelectedCategory(Number(categoryParam));
+      setSelectedCategories(categoryParam.split(',').map(Number).filter(n => !isNaN(n)));
+    } else {
+      setSelectedCategories([]);
     }
-  }, [categoryParam]);
+    if (locationParam) {
+      setSelectedLocations(locationParam.split(','));
+    } else {
+      setSelectedLocations([]);
+    }
+    if (packageParam) {
+      setSelectedPackages(packageParam.split(',').map(Number).filter(n => !isNaN(n)));
+    } else {
+      setSelectedPackages([]);
+    }
+  }, [categoryParam, locationParam, packageParam]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (categoryDropdownRef.current && !categoryDropdownRef.current.contains(event.target as Node)) {
+        setIsCategoryDropdownOpen(false);
+      }
+      if (locationDropdownRef.current && !locationDropdownRef.current.contains(event.target as Node)) {
+        setIsLocationDropdownOpen(false);
+      }
+      if (packageDropdownRef.current && !packageDropdownRef.current.contains(event.target as Node)) {
+        setIsPackageDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   useEffect(() => {
     setCurrentPage(1); // Reset to first page on filter change
-  }, [searchQuery, selectedCategory, selectedLocation, selectedPackage, filterParam, sortBy, sortOrder]);
+  }, [searchQuery, selectedCategories, selectedLocations, selectedPackages, filterParam, sortBy, sortOrder]);
 
   useEffect(() => {
     const fetchOptions = async () => {
@@ -79,16 +123,16 @@ export function Inventory() {
           });
         }
 
-        if (selectedCategory !== 'all') {
-          filter._and.push({ type: { _eq: selectedCategory } });
+        if (selectedCategories.length > 0) {
+          filter._and.push({ type: { _in: selectedCategories } });
         }
 
-        if (selectedLocation !== 'all') {
-          filter._and.push({ location: { _eq: selectedLocation } });
+        if (selectedLocations.length > 0) {
+          filter._and.push({ location: { _in: selectedLocations } });
         }
 
-        if (selectedPackage !== 'all') {
-          filter._and.push({ package: { _eq: selectedPackage } });
+        if (selectedPackages.length > 0) {
+          filter._and.push({ package: { _in: selectedPackages } });
         }
 
         if (filterParam === 'low_stock') {
@@ -137,7 +181,7 @@ export function Inventory() {
     };
 
     fetchComponents();
-  }, [searchQuery, selectedCategory, selectedLocation, selectedPackage, filterParam, sortBy, sortOrder, currentPage, navigate]);
+  }, [searchQuery, selectedCategories, selectedLocations, selectedPackages, filterParam, sortBy, sortOrder, currentPage, navigate]);
 
   const getStatus = (quantity: number) => {
     if (quantity === 0) return { label: "Out of Stock", color: "bg-red-500 text-white", stockColor: "text-red-500 font-bold" };
@@ -180,10 +224,70 @@ export function Inventory() {
   };
 
   const clearFilters = () => {
-    setSelectedCategory('all');
-    setSelectedLocation('all');
-    setSelectedPackage('all');
+    setSelectedCategories([]);
+    setSelectedLocations([]);
+    setSelectedPackages([]);
     setSearchParams({});
+  };
+
+  const toggleCategory = (id: number) => {
+    setSelectedCategories(prev => {
+      const next = prev.includes(id) 
+        ? prev.filter(i => i !== id) 
+        : [...prev, id];
+      
+      // Update URL params
+      setSearchParams(params => {
+        if (next.length > 0) {
+          params.set("category", next.join(','));
+        } else {
+          params.delete("category");
+        }
+        return params;
+      });
+      
+      return next;
+    });
+  };
+
+  const toggleLocation = (id: string) => {
+    setSelectedLocations(prev => {
+      const next = prev.includes(id) 
+        ? prev.filter(i => i !== id) 
+        : [...prev, id];
+      
+      // Update URL params
+      setSearchParams(params => {
+        if (next.length > 0) {
+          params.set("location", next.join(','));
+        } else {
+          params.delete("location");
+        }
+        return params;
+      });
+      
+      return next;
+    });
+  };
+
+  const togglePackage = (id: number) => {
+    setSelectedPackages(prev => {
+      const next = prev.includes(id) 
+        ? prev.filter(i => i !== id) 
+        : [...prev, id];
+      
+      // Update URL params
+      setSearchParams(params => {
+        if (next.length > 0) {
+          params.set("package", next.join(','));
+        } else {
+          params.delete("package");
+        }
+        return params;
+      });
+      
+      return next;
+    });
   };
 
   // Group categories by name
@@ -320,46 +424,156 @@ export function Inventory() {
         {/* Expanded Filters */}
         {showFilters && (
           <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800 grid grid-cols-1 md:grid-cols-3 gap-4 animate-in slide-in-from-top-2 duration-200">
-            <div>
+            <div className="relative" ref={categoryDropdownRef}>
               <label className="text-xs font-bold text-slate-500 uppercase mb-1.5 block">Category</label>
-              <select 
-                value={selectedCategory}
-                onChange={(e) => setSelectedCategory(e.target.value === 'all' ? 'all' : Number(e.target.value))}
-                className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm outline-none focus:border-primary"
+              <button
+                onClick={() => setIsCategoryDropdownOpen(!isCategoryDropdownOpen)}
+                className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm outline-none focus:border-primary flex items-center justify-between min-h-[38px]"
               >
-                <option value="all">All Categories</option>
-                {Object.entries(groupedCategories).map(([name, subTypes]) => (
-                  <optgroup key={name} label={name}>
-                    {subTypes.map(t => (
-                      <option key={t.id} value={t.id}>
-                        {t.comments || t.name}
-                      </option>
-                    ))}
-                  </optgroup>
-                ))}
-              </select>
+                <span className="truncate">
+                  {selectedCategories.length === 0 
+                    ? "All Categories" 
+                    : selectedCategories.length === 1 
+                      ? (() => {
+                          const type = types.find(t => t.id === selectedCategories[0]);
+                          return type ? `${type.name} - ${type.comments || type.name}` : "1 selected";
+                        })()
+                      : `${selectedCategories.length} selected`}
+                </span>
+                <ChevronDown className={cn("w-4 h-4 transition-transform", isCategoryDropdownOpen && "rotate-180")} />
+              </button>
+              
+              {isCategoryDropdownOpen && (
+                <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg shadow-xl max-h-60 overflow-y-auto p-1 animate-in fade-in slide-in-from-top-1">
+                  <button
+                    onClick={() => {
+                      setSelectedCategories([]);
+                      setSearchParams(p => { p.delete("category"); return p; });
+                      setIsCategoryDropdownOpen(false);
+                    }}
+                    className={cn(
+                      "w-full text-left px-3 py-2 rounded-md text-sm transition-colors mb-1",
+                      selectedCategories.length === 0 ? "bg-primary/10 text-primary font-bold" : "hover:bg-slate-50 dark:hover:bg-slate-800"
+                    )}
+                  >
+                    All Categories
+                  </button>
+                  {Object.entries(groupedCategories).map(([name, subTypes]) => (
+                    <div key={name} className="mb-2">
+                      <div className="px-3 py-1 text-[10px] font-black uppercase tracking-widest text-slate-400 bg-slate-50 dark:bg-slate-800/50 rounded-md mb-1">
+                        {name}
+                      </div>
+                      {subTypes.map(t => (
+                        <button
+                          key={t.id}
+                          onClick={() => toggleCategory(t.id)}
+                          className={cn(
+                            "w-full text-left px-3 py-2 rounded-md text-sm transition-colors flex items-center justify-between",
+                            selectedCategories.includes(t.id) ? "bg-primary/10 text-primary font-bold" : "hover:bg-slate-50 dark:hover:bg-slate-800"
+                          )}
+                        >
+                          <span>{name} - {t.comments || t.name}</span>
+                          {selectedCategories.includes(t.id) && <div className="w-2 h-2 rounded-full bg-primary" />}
+                        </button>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
-            <div>
+            <div className="relative" ref={locationDropdownRef}>
               <label className="text-xs font-bold text-slate-500 uppercase mb-1.5 block">Location</label>
-              <select 
-                value={selectedLocation}
-                onChange={(e) => setSelectedLocation(e.target.value === 'all' ? 'all' : e.target.value)}
-                className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm outline-none focus:border-primary"
+              <button
+                onClick={() => setIsLocationDropdownOpen(!isLocationDropdownOpen)}
+                className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm outline-none focus:border-primary flex items-center justify-between min-h-[38px]"
               >
-                <option value="all">All Locations</option>
-                {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
-              </select>
+                <span className="truncate">
+                  {selectedLocations.length === 0 
+                    ? "All Locations" 
+                    : selectedLocations.length === 1 
+                      ? locations.find(l => l.id === selectedLocations[0])?.name || "1 selected"
+                      : `${selectedLocations.length} selected`}
+                </span>
+                <ChevronDown className={cn("w-4 h-4 transition-transform", isLocationDropdownOpen && "rotate-180")} />
+              </button>
+              
+              {isLocationDropdownOpen && (
+                <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg shadow-xl max-h-60 overflow-y-auto p-1 animate-in fade-in slide-in-from-top-1">
+                  <button
+                    onClick={() => {
+                      setSelectedLocations([]);
+                      setSearchParams(p => { p.delete("location"); return p; });
+                      setIsLocationDropdownOpen(false);
+                    }}
+                    className={cn(
+                      "w-full text-left px-3 py-2 rounded-md text-sm transition-colors mb-1",
+                      selectedLocations.length === 0 ? "bg-primary/10 text-primary font-bold" : "hover:bg-slate-50 dark:hover:bg-slate-800"
+                    )}
+                  >
+                    All Locations
+                  </button>
+                  {locations.map(l => (
+                    <button
+                      key={l.id}
+                      onClick={() => toggleLocation(l.id)}
+                      className={cn(
+                        "w-full text-left px-3 py-2 rounded-md text-sm transition-colors flex items-center justify-between",
+                        selectedLocations.includes(l.id) ? "bg-primary/10 text-primary font-bold" : "hover:bg-slate-50 dark:hover:bg-slate-800"
+                      )}
+                    >
+                      <span>{l.name}</span>
+                      {selectedLocations.includes(l.id) && <div className="w-2 h-2 rounded-full bg-primary" />}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
-            <div>
+            <div className="relative" ref={packageDropdownRef}>
               <label className="text-xs font-bold text-slate-500 uppercase mb-1.5 block">Package</label>
-              <select 
-                value={selectedPackage}
-                onChange={(e) => setSelectedPackage(e.target.value === 'all' ? 'all' : Number(e.target.value))}
-                className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm outline-none focus:border-primary"
+              <button
+                onClick={() => setIsPackageDropdownOpen(!isPackageDropdownOpen)}
+                className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm outline-none focus:border-primary flex items-center justify-between min-h-[38px]"
               >
-                <option value="all">All Packages</option>
-                {packages.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
+                <span className="truncate">
+                  {selectedPackages.length === 0 
+                    ? "All Packages" 
+                    : selectedPackages.length === 1 
+                      ? packages.find(p => p.id === selectedPackages[0])?.name || "1 selected"
+                      : `${selectedPackages.length} selected`}
+                </span>
+                <ChevronDown className={cn("w-4 h-4 transition-transform", isPackageDropdownOpen && "rotate-180")} />
+              </button>
+              
+              {isPackageDropdownOpen && (
+                <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg shadow-xl max-h-60 overflow-y-auto p-1 animate-in fade-in slide-in-from-top-1">
+                  <button
+                    onClick={() => {
+                      setSelectedPackages([]);
+                      setSearchParams(p => { p.delete("package"); return p; });
+                      setIsPackageDropdownOpen(false);
+                    }}
+                    className={cn(
+                      "w-full text-left px-3 py-2 rounded-md text-sm transition-colors mb-1",
+                      selectedPackages.length === 0 ? "bg-primary/10 text-primary font-bold" : "hover:bg-slate-50 dark:hover:bg-slate-800"
+                    )}
+                  >
+                    All Packages
+                  </button>
+                  {packages.map(p => (
+                    <button
+                      key={p.id}
+                      onClick={() => togglePackage(p.id)}
+                      className={cn(
+                        "w-full text-left px-3 py-2 rounded-md text-sm transition-colors flex items-center justify-between",
+                        selectedPackages.includes(p.id) ? "bg-primary/10 text-primary font-bold" : "hover:bg-slate-50 dark:hover:bg-slate-800"
+                      )}
+                    >
+                      <span>{p.name}</span>
+                      {selectedPackages.includes(p.id) && <div className="w-2 h-2 rounded-full bg-primary" />}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
             <div className="md:col-span-3 flex justify-end">
               <button 
@@ -403,7 +617,7 @@ export function Inventory() {
           <div className="col-span-full flex flex-col items-center justify-center py-20 text-slate-400">
             <Package className="w-12 h-12 mb-4 opacity-20" />
             <p>{searchQuery ? `No components found matching "${searchQuery}"` : "No components found. Add your first one!"}</p>
-            {(selectedCategory !== 'all' || selectedLocation !== 'all' || selectedPackage !== 'all') && (
+            {(selectedCategories.length > 0 || selectedLocations.length > 0 || selectedPackages.length > 0) && (
               <button onClick={clearFilters} className="mt-4 text-primary text-sm font-bold hover:underline">
                 Clear all filters
               </button>
@@ -413,7 +627,7 @@ export function Inventory() {
           components.map((comp) => {
             const status = getStatus(comp.quantity_available);
             const categoryName = (comp.type as ComponentType)?.name || "Uncategorized";
-            const subcategoryName = comp.subcategory || "";
+            const subcategoryName = (comp.type as ComponentType)?.comments || "";
             
             return (
               <Link
@@ -436,7 +650,7 @@ export function Inventory() {
                 </div>
                 <div className="p-4">
                   <p className={`text-[10px] font-bold uppercase tracking-tighter mb-1 text-primary truncate`}>
-                    {categoryName}{subcategoryName ? ` / ${subcategoryName}` : ''}
+                    {categoryName}{subcategoryName ? ` - ${subcategoryName}` : ''}
                   </p>
                   <h3 className="font-bold text-sm text-slate-900 dark:text-slate-100 truncate" title={comp.name}>{comp.name}</h3>
                   <div className="mt-3 flex items-center justify-between">

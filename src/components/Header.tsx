@@ -62,7 +62,7 @@ export function Header() {
   const isMoreActive = moreNavLinks.some(link => location.pathname === link.path);
 
   return (
-    <header className="flex items-center justify-between whitespace-nowrap border-b border-slate-200 dark:border-slate-800 px-4 md:px-6 py-4 bg-background-light dark:bg-background-dark sticky top-0 z-50">
+    <header className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between whitespace-nowrap border-b border-slate-200 dark:border-slate-800 px-4 md:px-6 py-4 bg-background-light/80 dark:bg-background-dark/80 backdrop-blur-md">
       <div className="flex items-center gap-4 md:gap-8">
         <button 
           className="md:hidden p-2 -ml-2 text-slate-600 dark:text-slate-400 hover:text-primary transition-colors"
