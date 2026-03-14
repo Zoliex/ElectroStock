@@ -269,18 +269,18 @@ export function AddComponent() {
   
   // Modal Form States
   const [modalName, setModalName] = useState("");
-  const [modalComments, setModalComments] = useState("");
+  const [modalSubcategory, setModalSubcategory] = useState("");
   const [isModalSaving, setIsModalSaving] = useState(false);
 
   const openCategoryModal = (category?: ComponentType) => {
     if (category) {
       setEditingCategory(category);
       setModalName(category.name);
-      setModalComments(category.comments || "");
+      setModalSubcategory(category.subcategory || "");
     } else {
       setEditingCategory(null);
       setModalName("");
-      setModalComments("");
+      setModalSubcategory("");
     }
     setShowCategoryModal(true);
   };
@@ -313,14 +313,14 @@ export function AddComponent() {
       if (editingCategory) {
         await directus.request(updateItem('components_types', editingCategory.id, {
           name: modalName,
-          comments: modalComments
+          subcategory: modalSubcategory
         }));
-        setCategories(prev => prev.map(c => c.id === editingCategory.id ? { ...c, name: modalName, comments: modalComments } : c));
+        setCategories(prev => prev.map(c => c.id === editingCategory.id ? { ...c, name: modalName, subcategory: modalSubcategory } : c));
         toast.success("Category updated");
       } else {
         const newCat = await directus.request(createItem('components_types', {
           name: modalName,
-          comments: modalComments
+          subcategory: modalSubcategory
         }));
         setCategories(prev => [...prev, newCat as ComponentType]);
         setFormData(prev => ({ ...prev, category: String(newCat.id) }));
@@ -380,7 +380,7 @@ export function AddComponent() {
       const context = searchResults.slice(0, 5).map((r: any) => r.title).join("\n");
 
       // 2. Use our backend to fill fields
-      const categoriesInfo = categories.map(c => `${c.name} (Subcategories: ${c.comments || 'none'})`).join("; ");
+      const categoriesInfo = categories.map(c => `${c.name} (Subcategories: ${c.subcategory || 'none'})`).join("; ");
       const packagesInfo = packages.map(p => p.name).join(", ");
       
       const aiResponse = await fetch("/api/ai-research", {
@@ -417,8 +417,8 @@ export function AddComponent() {
       }
       
       if (data.subcategory) {
-        if (matchedCategory && matchedCategory.comments) {
-          const existingSubcategories = matchedCategory.comments.split(',').map(s => s.trim());
+        if (matchedCategory && matchedCategory.subcategory) {
+          const existingSubcategories = matchedCategory.subcategory.split(',').map(s => s.trim());
           const matchedSubcat = existingSubcategories.find(s => 
             s.toLowerCase() === data.subcategory.toLowerCase() ||
             s.toLowerCase().includes(data.subcategory.toLowerCase()) ||
@@ -708,7 +708,7 @@ export function AddComponent() {
                           ) : (
                             categories.map(cat => (
                               <option key={cat.id} value={cat.id}>
-                                {cat.name}{cat.comments ? ` - ${cat.comments}` : ''}
+                                {cat.name}{cat.subcategory ? ` - ${cat.subcategory}` : ''}
                               </option>
                             ))
                           )}
@@ -1323,8 +1323,8 @@ export function AddComponent() {
               <div className="flex flex-col gap-2">
                 <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Subcategory</label>
                 <textarea
-                  value={modalComments}
-                  onChange={(e) => setModalComments(e.target.value)}
+                  value={modalSubcategory}
+                  onChange={(e) => setModalSubcategory(e.target.value)}
                   className={`form-input w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white p-3 text-sm min-h-[80px] resize-none ${focusClasses}`}
                   placeholder="e.g. SMD, Through-hole..."
                 />

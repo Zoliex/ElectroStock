@@ -7,7 +7,6 @@ export function Settings() {
   const [settings, setSettings] = useState({
     directusUrl: "",
     criticalStockThreshold: 10,
-    currency: "USD",
     enableAiSuggestions: true
   });
   const [isLoading, setIsLoading] = useState(true);
@@ -36,7 +35,10 @@ export function Settings() {
         body: JSON.stringify(settings)
       });
       if (!res.ok) throw new Error("Failed to save");
-      toast.success("Settings saved successfully");
+      toast.success("Settings saved successfully. Restarting app...");
+      
+      // Call restart endpoint
+      await fetch("/api/restart", { method: "POST" });
     } catch (error) {
       console.error(error);
       toast.error("Failed to save settings");
@@ -117,18 +119,6 @@ export function Settings() {
                   className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-4 py-2.5 text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
                 />
                 <p className="text-xs text-slate-500 mt-1">Items below this quantity will be flagged as low stock.</p>
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Currency</label>
-                <select 
-                  value={settings.currency}
-                  onChange={e => setSettings({...settings, currency: e.target.value})}
-                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-4 py-2.5 text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
-                >
-                  <option value="USD">USD ($)</option>
-                  <option value="EUR">EUR (€)</option>
-                  <option value="GBP">GBP (£)</option>
-                </select>
               </div>
             </div>
           </div>

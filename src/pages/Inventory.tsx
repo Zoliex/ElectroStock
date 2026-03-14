@@ -436,7 +436,7 @@ export function Inventory() {
                     : selectedCategories.length === 1 
                       ? (() => {
                           const type = types.find(t => t.id === selectedCategories[0]);
-                          return type ? `${type.name} - ${type.comments || type.name}` : "1 selected";
+                          return type ? `${type.name} - ${type.subcategory || type.name}` : "1 selected";
                         })()
                       : `${selectedCategories.length} selected`}
                 </span>
@@ -472,7 +472,7 @@ export function Inventory() {
                             selectedCategories.includes(t.id) ? "bg-primary/10 text-primary font-bold" : "hover:bg-slate-50 dark:hover:bg-slate-800"
                           )}
                         >
-                          <span>{name} - {t.comments || t.name}</span>
+                          <span>{name} - {t.subcategory || t.name}</span>
                           {selectedCategories.includes(t.id) && <div className="w-2 h-2 rounded-full bg-primary" />}
                         </button>
                       ))}
@@ -627,7 +627,7 @@ export function Inventory() {
           components.map((comp) => {
             const status = getStatus(comp.quantity_available);
             const categoryName = (comp.type as ComponentType)?.name || "Uncategorized";
-            const subcategoryName = (comp.type as ComponentType)?.comments || "";
+            const subcategoryName = comp.subcategory || "";
             
             return (
               <Link

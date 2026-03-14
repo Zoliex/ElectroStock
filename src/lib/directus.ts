@@ -15,7 +15,7 @@ export interface ComponentPackage {
 export interface ComponentType {
   id: number;
   name: string;
-  comments: string;
+  subcategory: string;
 }
 
 export interface ComponentFile {

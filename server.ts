@@ -14,7 +14,6 @@ const SETTINGS_FILE = path.join(process.cwd(), 'settings.json');
 const defaultSettings = {
   directusUrl: process.env.VITE_DIRECTUS_URL || "https://directus.example.com",
   criticalStockThreshold: 10,
-  currency: "USD",
   enableAiSuggestions: true
 };
 
@@ -81,6 +80,15 @@ async function startServer() {
       console.error("[API] Error saving settings:", error);
       res.status(500).json({ error: "Failed to save settings" });
     }
+  });
+
+  app.post("/api/restart", (req, res) => {
+    console.log("[API] POST /api/restart");
+    res.json({ success: true, message: "Stopping application..." });
+    // Stop the process after a short delay to allow the response to be sent
+    setTimeout(() => {
+      process.exit(0);
+    }, 1000);
   });
 
   // SerpApi Image Search Proxy Route
