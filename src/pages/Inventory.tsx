@@ -47,6 +47,24 @@ export function Inventory() {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalItems, setTotalItems] = useState(0);
   const [itemsPerPage, setItemsPerPage] = useState(20);
+  const [criticalThreshold, setCriticalThreshold] = useState(10);
+
+  useEffect(() => {
+    const fetchSettings = async () => {
+      try {
+        const res = await fetch("/api/settings");
+        if (res.ok) {
+          const data = await res.json();
+          if (data.criticalStockThreshold !== undefined) {
+            setCriticalThreshold(data.criticalStockThreshold);
+          }
+        }
+      } catch (e) {
+        console.error("Failed to fetch settings", e);
+      }
+    };
+    fetchSettings();
+  }, []);
 
   useEffect(() => {
     if (categoryParam) {
@@ -136,7 +154,7 @@ export function Inventory() {
         }
 
         if (filterParam === 'low_stock') {
-          filter._and.push({ quantity_available: { _lte: 10 } });
+          filter._and.push({ quantity_available: { _lte: criticalThreshold } });
         }
 
         const queryParams: any = {
@@ -181,11 +199,11 @@ export function Inventory() {
     };
 
     fetchComponents();
-  }, [searchQuery, selectedCategories, selectedLocations, selectedPackages, filterParam, sortBy, sortOrder, currentPage, navigate]);
+  }, [searchQuery, selectedCategories, selectedLocations, selectedPackages, filterParam, sortBy, sortOrder, currentPage, navigate, criticalThreshold]);
 
   const getStatus = (quantity: number) => {
     if (quantity === 0) return { label: "Out of Stock", color: "bg-red-500 text-white", stockColor: "text-red-500 font-bold" };
-    if (quantity < 10) return { label: "Low Stock", color: "bg-orange-500 text-white", stockColor: "text-orange-500 font-bold" };
+    if (quantity <= criticalThreshold) return { label: "Low Stock", color: "bg-orange-500 text-white", stockColor: "text-orange-500 font-bold" };
     return { label: "Healthy", color: "bg-emerald-500 text-white", stockColor: "text-slate-500" };
   };
 
@@ -591,7 +609,7 @@ export function Inventory() {
           <div className="mt-4 flex items-center justify-between bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-lg p-3 text-sm text-orange-800 dark:text-orange-200 animate-in fade-in slide-in-from-top-2 duration-200">
             <div className="flex items-center gap-2">
               <AlertTriangle className="w-4 h-4 text-orange-600 dark:text-orange-400" />
-              <span className="font-semibold">Filtering by Low Stock (≤ 10 units)</span>
+              <span className="font-semibold">Filtering by Low Stock (≤ {criticalThreshold} units)</span>
             </div>
             <button 
               onClick={() => {

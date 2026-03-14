@@ -4,7 +4,7 @@ import axios from "axios";
 import dotenv from "dotenv";
 import fs from "fs";
 import path from "path";
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenAI } from "@google/genai";
 import { createProxyMiddleware } from "http-proxy-middleware";
 
 dotenv.config();
@@ -170,14 +170,14 @@ async function startServer() {
         config: {
           responseMimeType: "application/json",
           responseSchema: {
-            type: Type.OBJECT,
+            type: "OBJECT",
             properties: {
-              description: { type: Type.STRING, description: "A detailed technical description in Markdown format, including pinout, characteristics, etc. MUST use proper line breaks." },
-              category: { type: Type.STRING, description: "The best-matching category from the available list or a suggested new one" },
-              subcategory: { type: Type.STRING, description: "The best-matching subcategory from the chosen category's subcategories, or a suggested new one" },
-              package: { type: Type.STRING, description: "The best-matching package from the available list or a suggested new one" },
-              keywords: { type: Type.ARRAY, items: { type: Type.STRING }, description: "Relevant technical keywords" },
-              packet_reference: { type: Type.STRING, description: "A likely manufacturer part number or reference" }
+              description: { type: "STRING", description: "A detailed technical description in Markdown format, including pinout, characteristics, etc. MUST use proper line breaks." },
+              category: { type: "STRING", description: "The best-matching category from the available list or a suggested new one" },
+              subcategory: { type: "STRING", description: "The best-matching subcategory from the chosen category's subcategories, or a suggested new one" },
+              package: { type: "STRING", description: "The best-matching package from the available list or a suggested new one" },
+              keywords: { type: "ARRAY", items: { type: "STRING" }, description: "Relevant technical keywords" },
+              packet_reference: { type: "STRING", description: "A likely manufacturer part number or reference" }
             },
             required: ["description", "category", "subcategory", "package", "keywords"]
           }

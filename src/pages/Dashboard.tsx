@@ -27,6 +27,7 @@ export function Dashboard() {
     totalUnits: 0,
     totalBoxes: 0,
     criticalStock: 0,
+    criticalThreshold: 10,
   });
   const [recentComponents, setRecentComponents] = useState<Component[]>([]);
   const [allItems, setAllItems] = useState<Component[]>([]);
@@ -37,6 +38,20 @@ export function Dashboard() {
     async function fetchData() {
       try {
         setLoading(true);
+
+        // Fetch settings for critical threshold
+        let criticalThreshold = 10;
+        try {
+          const settingsRes = await fetch("/api/settings");
+          if (settingsRes.ok) {
+            const settingsData = await settingsRes.json();
+            if (settingsData.criticalStockThreshold !== undefined) {
+              criticalThreshold = settingsData.criticalStockThreshold;
+            }
+          }
+        } catch (e) {
+          console.error("Failed to fetch settings", e);
+        }
 
         // Fetch all necessary data
         // We use Promise.all to fetch in parallel
@@ -63,7 +78,6 @@ export function Dashboard() {
         const totalUnits = components.reduce((sum, item) => sum + (item.quantity_available || 0), 0);
         const totalBoxes = boxes.length;
         
-        const criticalThreshold = 10;
         const lowStock = components.filter(c => (c.quantity_available || 0) <= criticalThreshold);
         const criticalStock = lowStock.length;
 
@@ -72,6 +86,7 @@ export function Dashboard() {
           totalUnits,
           totalBoxes: parseInt(totalBoxes as any),
           criticalStock,
+          criticalThreshold,
         });
 
         // Recent Activity (first 5 from the sorted list)
@@ -230,7 +245,7 @@ export function Dashboard() {
               <ArrowUp className="w-4 h-4 mr-1" /> 4
             </p> */}
           </div>
-          <p className="text-xs text-orange-600/60 dark:text-orange-400/60">Items with &le; 10 units</p>
+          <p className="text-xs text-orange-600/60 dark:text-orange-400/60">Items with &le; {metrics.criticalThreshold} units</p>
         </div>
       </div>
 
@@ -281,7 +296,7 @@ export function Dashboard() {
                       </td>
                       <td className="px-6 py-4 text-sm font-medium whitespace-nowrap">{component.quantity_available} units</td>
                       <td className="px-6 py-4">
-                        {(component.quantity_available || 0) <= 10 ? (
+                        {(component.quantity_available || 0) <= metrics.criticalThreshold ? (
                           <div className="flex items-center gap-1.5 text-orange-500 text-xs font-bold uppercase whitespace-nowrap">
                             <span className="size-1.5 rounded-full bg-orange-500 animate-pulse"></span> Low Stock
                           </div>
