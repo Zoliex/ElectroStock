@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { BrowserRouter as Router, Routes, Route, useNavigate } from "react-router-dom";
+import { BrowserRouter as Router, Routes, Route, useNavigate, useLocation } from "react-router-dom";
 import { Toaster } from "sonner";
 import { Header } from "./components/Header";
 import { Footer } from "./components/Footer";
@@ -19,6 +19,22 @@ import { useEffect } from "react";
 
 function AppContent() {
   const navigate = useNavigate();
+  const location = useLocation();
+
+  useEffect(() => {
+    const path = location.pathname;
+    let pageName = "Dashboard";
+    if (path === "/") pageName = "Dashboard";
+    else if (path.startsWith("/inventory/add")) pageName = "Add Component";
+    else if (path.startsWith("/inventory/edit")) pageName = "Edit Component";
+    else if (path.startsWith("/inventory")) pageName = "Inventory";
+    else if (path.startsWith("/categories")) pageName = "Categories";
+    else if (path.startsWith("/boxes")) pageName = "Boxes";
+    else if (path.startsWith("/barcodes")) pageName = "Batch Barcodes";
+    else if (path.startsWith("/settings")) pageName = "Settings";
+    
+    document.title = `ElectroStock - ${pageName}`;
+  }, [location]);
 
   useEffect(() => {
     let buffer = "";
