@@ -645,7 +645,7 @@ export function Inventory() {
           components.map((comp) => {
             const status = getStatus(comp.quantity_available);
             const categoryName = (comp.type as ComponentType)?.name || "Uncategorized";
-            const subcategoryName = comp.subcategory || "";
+            const subcategoryName = (comp.type as ComponentType)?.subcategory || "";
             
             return (
               <Link

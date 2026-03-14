@@ -152,7 +152,7 @@ export function ComponentDetails() {
   }
 
   const categoryName = (component.type as ComponentType)?.name || "Uncategorized";
-  const subcategoryName = component.subcategory || "";
+  const subcategoryName = (component.type as ComponentType)?.subcategory || "";
   const locationName = (component.location as Box)?.name || "Unknown Location";
   const locationId = (component.location as Box)?.unique_id || "N/A";
   const packageName = (component.package as ComponentPackage)?.name || "Unknown Package";
@@ -215,13 +215,9 @@ export function ComponentDetails() {
           Inventory
         </Link>
         <ChevronRight className="w-4 h-4" />
-        <Link to={`/inventory?category=${(component.type as ComponentType)?.id || ''}`} className="hover:text-primary cursor-pointer transition-colors">{categoryName}</Link>
-        {subcategoryName && (
-          <>
-            <ChevronRight className="w-4 h-4" />
-            <span className="text-slate-500 dark:text-slate-400">{subcategoryName}</span>
-          </>
-        )}
+        <Link to={`/inventory?category=${(component.type as ComponentType)?.id || ''}`} className="hover:text-primary cursor-pointer transition-colors">
+          {categoryName}{subcategoryName ? ` - ${subcategoryName}` : ''}
+        </Link>
         <ChevronRight className="w-4 h-4" />
         <span className="text-slate-900 dark:text-slate-100 font-medium">{component.name}</span>
       </nav>

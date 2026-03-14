@@ -172,7 +172,7 @@ export function AddComponent() {
         setFormData({
           name: isCloneMode ? `${component.name} (Copy)` : component.name,
           category: typeof component.type === 'object' ? component.type?.id?.toString() || "" : String(component.type || ""),
-          subcategory: component.subcategory || "",
+          subcategory: typeof component.type === 'object' ? component.type?.subcategory || "" : "",
           pkg: typeof component.package === 'object' ? component.package?.id?.toString() || "" : String(component.package || ""),
           description: component.description || "",
           quantity: isCloneMode ? 0 : (component.quantity_available || 0),
@@ -573,7 +573,6 @@ export function AddComponent() {
         packet_reference: formData.packetReference || null,
         package: formData.pkg && formData.pkg !== "0" ? Number(formData.pkg) : null,
         type: formData.category && formData.category !== "0" ? Number(formData.category) : null,
-        subcategory: formData.subcategory || null,
         barcode: barcodes.length > 0 ? barcodes.join(';') : null,
       };
 
@@ -1268,9 +1267,24 @@ export function AddComponent() {
                     let newSubcat = formData.subcategory;
 
                     if (aiProposal.category) {
-                      const catRes = await directus.request(createItem('components_types', { name: aiProposal.category }));
+                      const catRes = await directus.request(createItem('components_types', { 
+                        name: aiProposal.category,
+                        subcategory: aiProposal.subcategory || null
+                      }));
                       newCatId = catRes.id.toString();
                       setCategories(prev => [...prev, catRes as ComponentType]);
+                    } else if (aiProposal.subcategory && newCatId) {
+                      const existingCat = categories.find(c => c.id.toString() === newCatId);
+                      if (existingCat) {
+                        const updatedSubcategories = existingCat.subcategory 
+                          ? `${existingCat.subcategory}, ${aiProposal.subcategory}`
+                          : aiProposal.subcategory;
+                        
+                        const catRes = await directus.request(updateItem('components_types', existingCat.id, {
+                          subcategory: updatedSubcategories
+                        }));
+                        setCategories(prev => prev.map(c => c.id === existingCat.id ? { ...c, subcategory: updatedSubcategories } : c));
+                      }
                     }
                     if (aiProposal.subcategory) {
                       newSubcat = aiProposal.subcategory;
