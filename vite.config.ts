@@ -13,7 +13,7 @@ export default defineConfig(({mode}) => {
       tailwindcss(),
       VitePWA({
         registerType: 'autoUpdate',
-        includeAssets: ['favicon.png'],
+        includeAssets: ['icon.svg'],
         workbox: {
           maximumFileSizeToCacheInBytes: 5000000 // 5MB
         },
@@ -21,17 +21,21 @@ export default defineConfig(({mode}) => {
           name: 'ElectroStock',
           short_name: 'ElectroStock',
           description: 'Electronic Component Inventory Management',
-          theme_color: '#ffffff',
+          theme_color: '#0f172a',
+          background_color: '#0f172a',
+          display: 'standalone',
           icons: [
             {
-              src: 'favicon.png',
+              src: 'icon.svg',
               sizes: '192x192',
-              type: 'image/png'
+              type: 'image/svg+xml',
+              purpose: 'any maskable'
             },
             {
-              src: 'favicon.png',
+              src: 'icon.svg',
               sizes: '512x512',
-              type: 'image/png'
+              type: 'image/svg+xml',
+              purpose: 'any maskable'
             }
           ]
         }

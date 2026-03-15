@@ -17,29 +17,23 @@ export function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps) {
 
     const startScanner = async () => {
       try {
-        const devices = await Html5Qrcode.getCameras();
-        if (devices && devices.length) {
-          html5QrCode = new Html5Qrcode("reader");
-          await html5QrCode.start(
-            { facingMode: "environment" },
-            {
-              fps: 10,
-              qrbox: { width: 250, height: 250 },
-            },
-            (decodedText) => {
-              onScan(decodedText);
-              // We don't automatically close here, let the parent decide or close manually
-            },
-            (errorMessage) => {
-              // Ignore scan errors as they happen constantly when no barcode is in view
-            }
-          );
-        } else {
-          setHasCameras(false);
-          setError("No cameras found on this device.");
-        }
+        html5QrCode = new Html5Qrcode("reader");
+        await html5QrCode.start(
+          { facingMode: "environment" },
+          {
+            fps: 10,
+            qrbox: { width: 250, height: 250 },
+          },
+          (decodedText) => {
+            onScan(decodedText);
+          },
+          (errorMessage) => {
+            // Ignore scan errors
+          }
+        );
       } catch (err: any) {
         console.error("Error starting scanner:", err);
+        // If start fails, try to check if it's a permission issue
         setError(err?.message || "Failed to start camera. Please check permissions.");
       }
     };
