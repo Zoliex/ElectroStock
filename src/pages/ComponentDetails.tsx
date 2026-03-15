@@ -1,9 +1,12 @@
-import { useState, useEffect } from "react";
-import { motion } from "motion/react";
+import { useState, useEffect, useRef } from "react";
+import { motion, AnimatePresence } from "motion/react";
+import Viewer from 'viewerjs';
+import 'viewerjs/dist/viewer.css';
 import {
   Edit2,
   PlusSquare,
   ChevronRight,
+  ChevronLeft,
   Cpu,
   Package,
   MapPin,
@@ -24,7 +27,8 @@ import {
   Image as ImageIcon,
   ExternalLink,
   Download,
-  Paperclip
+  Paperclip,
+  Maximize2
 } from "lucide-react";
 import { Link, useParams, useNavigate } from "react-router-dom";
 import { directus, Component, getFileUrl, ComponentType, Box, ComponentPackage } from "../lib/directus";
@@ -43,13 +47,109 @@ export function ComponentDetails() {
   const [showStockModal, setShowStockModal] = useState(false);
   const [stockAdjustment, setStockAdjustment] = useState<number>(0);
   const [isUpdating, setIsUpdating] = useState(false);
+  const [criticalThreshold, setCriticalThreshold] = useState(10);
+  const [activeImageIndex, setActiveImageIndex] = useState(0);
+  const viewerRef = useRef<HTMLDivElement>(null);
+  const viewerInstance = useRef<Viewer | null>(null);
+
+  const openViewer = (index: number) => {
+    if (viewerInstance.current) {
+      viewerInstance.current.view(index);
+    }
+  };
+
+  useEffect(() => {
+    setActiveImageIndex(0);
+  }, [id]);
+
+  const getFileData = (f: any): { id: string | null, title: string | null } => {
+    if (!f) return { id: null, title: null };
+    const fileObj = f.directus_files_id || f;
+    if (typeof fileObj === 'object' && fileObj !== null) {
+      return { 
+        id: fileObj.id || null, 
+        title: fileObj.title || fileObj.filename_download || null 
+      };
+    }
+    return { id: typeof fileObj === 'string' ? fileObj : null, title: null };
+  };
+
+  const allImages = component ? [
+    { id: typeof component.main_image === 'object' ? (component.main_image as any).id : component.main_image, title: 'Main Image' },
+    ...((component as any).other_images?.map(getFileData) || []),
+    ...((component as any).components_files?.map(getFileData) || [])
+  ].filter((val, index, self) => val.id && self.findIndex(v => v.id === val.id) === index) : [];
+
+  const allFiles = component ? [
+    ...((component as any).other_files || []),
+    ...((component as any).components_files_1 || [])
+  ].map(getFileData).filter((f) => f.id !== null) : [];
+
+  useEffect(() => {
+    if (viewerRef.current && allImages.length > 0) {
+      if (viewerInstance.current) {
+        viewerInstance.current.destroy();
+      }
+      viewerInstance.current = new Viewer(viewerRef.current, {
+        url: 'src',
+        toolbar: {
+          zoomIn: 4,
+          zoomOut: 4,
+          oneToOne: 4,
+          reset: 4,
+          prev: 4,
+          play: {
+            show: 4,
+            size: 'large',
+          },
+          next: 4,
+          rotateLeft: 4,
+          rotateRight: 4,
+          flipHorizontal: 4,
+          flipVertical: 4,
+        },
+      });
+    }
+    return () => {
+      if (viewerInstance.current) {
+        viewerInstance.current.destroy();
+        viewerInstance.current = null;
+      }
+    };
+  }, [allImages]);
+
+  useEffect(() => {
+    const fetchSettings = async () => {
+      try {
+        const res = await fetch("/api/settings");
+        if (res.ok) {
+          const data = await res.json();
+          if (data.criticalStockThreshold !== undefined) {
+            setCriticalThreshold(data.criticalStockThreshold);
+          }
+        }
+      } catch (e) {
+        console.error("Failed to fetch settings", e);
+      }
+    };
+    fetchSettings();
+  }, []);
 
   const fetchComponent = async () => {
     if (!id) return;
     try {
       const fetchedComponent = await directus.request(
         readItem('components', Number(id), {
-          fields: ['*', 'type.*', 'package.*', 'location.*', 'components_files.*.directus_files_id', 'components_files_1.*.directus_files_id'] as any
+          fields: [
+            '*', 
+            'type.*', 
+            'package.*', 
+            'location.*', 
+            'other_images.directus_files_id.*', 
+            'other_files.directus_files_id.*',
+            'components_files.directus_files_id.*', 
+            'components_files_1.directus_files_id.*'
+          ] as any
         })
       );
       setComponent(fetchedComponent as unknown as Component);
@@ -194,7 +294,7 @@ export function ComponentDetails() {
       {/* Breadcrumbs & Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 mb-6">
         <div className="flex flex-col gap-1">
-          <h1 className="text-3xl font-black tracking-tight">Component Details</h1>
+          <h1 className="text-3xl font-black tracking-tight">{component.name}</h1>
           <p className="text-slate-500 dark:text-slate-400">Technical specifications and inventory status.</p>
         </div>
         <div className="flex gap-3">
@@ -227,20 +327,98 @@ export function ComponentDetails() {
         <div className="lg:col-span-2 space-y-8">
           {/* Hero Section */}
           <div className="bg-white dark:bg-slate-900 rounded-3xl overflow-hidden shadow-sm border border-slate-200 dark:border-slate-800">
-            <div className="aspect-video w-full relative bg-slate-100 dark:bg-slate-800 rounded-t-3xl overflow-hidden">
-              <img
-                alt={component.name}
-                className="absolute inset-0 w-full h-full object-contain p-4"
-                src={component.main_image ? getFileUrl(component.main_image) : "https://via.placeholder.com/800x400?text=No+Image"}
-              />
-              <div className="absolute top-4 right-4 flex gap-2">
-                {component.quantity_available > 0 ? (
-                  <span className="px-3 py-1 bg-emerald-500 text-white text-xs font-bold rounded-full shadow-sm">
-                    IN STOCK
+            <div ref={viewerRef} className="aspect-video w-full relative bg-slate-100 dark:bg-slate-800 rounded-t-3xl overflow-hidden group/carousel">
+              {/* Hidden list of all images for ViewerJS to pick up */}
+              <div className="hidden">
+                {allImages.map((img, idx) => (
+                  <img key={idx} src={getFileUrl(img.id!)} alt={img.title || `${component.name} - ${idx}`} />
+                ))}
+              </div>
+
+              <AnimatePresence mode="wait">
+                <motion.img
+                  key={allImages[activeImageIndex]?.id}
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -20 }}
+                  transition={{ duration: 0.3 }}
+                  drag="x"
+                  dragConstraints={{ left: 0, right: 0 }}
+                  dragElastic={0.2}
+                  onDragEnd={(_, info) => {
+                    if (allImages.length <= 1) return;
+                    const threshold = 50;
+                    if (info.offset.x > threshold) {
+                      setActiveImageIndex(prev => (prev - 1 + allImages.length) % allImages.length);
+                    } else if (info.offset.x < -threshold) {
+                      setActiveImageIndex(prev => (prev + 1) % allImages.length);
+                    }
+                  }}
+                  alt={component.name}
+                  className="absolute inset-0 w-full h-full object-contain p-4 cursor-grab active:cursor-grabbing"
+                  src={allImages.length > 0 ? getFileUrl(allImages[activeImageIndex].id!) : "https://via.placeholder.com/800x400?text=No+Image"}
+                  referrerPolicy="no-referrer"
+                  onClick={() => openViewer(activeImageIndex)}
+                />
+              </AnimatePresence>
+
+              <div className="absolute top-4 left-4 z-10">
+                <div className="px-3 py-1.5 rounded-xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm border border-white/20 shadow-lg">
+                  <span className="text-xs font-bold text-slate-900 dark:text-white">
+                    {allImages[activeImageIndex]?.title || `Image ${activeImageIndex + 1}`}
                   </span>
-                ) : (
+                  <span className="text-[10px] ml-2 text-slate-400 font-mono">
+                    {activeImageIndex + 1} / {allImages.length}
+                  </span>
+                </div>
+              </div>
+
+              <button 
+                onClick={() => openViewer(activeImageIndex)}
+                className="absolute top-4 right-4 size-10 rounded-xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm flex items-center justify-center text-slate-900 dark:text-white shadow-lg opacity-0 group-hover/carousel:opacity-100 transition-opacity z-10"
+                title="Enlarge Image"
+              >
+                <Maximize2 className="w-5 h-5" />
+              </button>
+              
+              {allImages.length > 1 && (
+                <>
+                  <button 
+                    onClick={() => setActiveImageIndex(prev => (prev - 1 + allImages.length) % allImages.length)}
+                    className="absolute left-4 top-1/2 -translate-y-1/2 size-10 rounded-full bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm flex items-center justify-center text-slate-900 dark:text-white shadow-lg opacity-0 group-hover/carousel:opacity-100 transition-opacity"
+                  >
+                    <ChevronLeft className="w-6 h-6" />
+                  </button>
+                  <button 
+                    onClick={() => setActiveImageIndex(prev => (prev + 1) % allImages.length)}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 size-10 rounded-full bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm flex items-center justify-center text-slate-900 dark:text-white shadow-lg opacity-0 group-hover/carousel:opacity-100 transition-opacity"
+                  >
+                    <ChevronRight className="w-6 h-6" />
+                  </button>
+                  <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-1.5">
+                    {allImages.map((_, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => setActiveImageIndex(idx)}
+                        className={`size-2 rounded-full transition-all ${activeImageIndex === idx ? 'bg-primary w-4' : 'bg-white/50 hover:bg-white'}`}
+                      />
+                    ))}
+                  </div>
+                </>
+              )}
+              
+              <div className="absolute bottom-4 right-4 flex gap-2 z-10">
+                {component.quantity_available === 0 ? (
                   <span className="px-3 py-1 bg-red-500 text-white text-xs font-bold rounded-full shadow-sm">
                     OUT OF STOCK
+                  </span>
+                ) : component.quantity_available <= criticalThreshold ? (
+                  <span className="px-3 py-1 bg-orange-500 text-white text-xs font-bold rounded-full shadow-sm">
+                    LOW STOCK
+                  </span>
+                ) : (
+                  <span className="px-3 py-1 bg-emerald-500 text-white text-xs font-bold rounded-full shadow-sm">
+                    IN STOCK
                   </span>
                 )}
                 {component.keywords && component.keywords.length > 0 && (
@@ -289,6 +467,47 @@ export function ComponentDetails() {
               ))}
             </div>
           </div>
+
+          {/* Additional Assets Section */}
+          {allFiles.length > 0 && (
+            <div className="bg-white dark:bg-slate-900 rounded-3xl p-8 shadow-sm border border-slate-200 dark:border-slate-800">
+              <h3 className="text-xl font-bold mb-6 flex items-center gap-2">
+                <Paperclip className="w-6 h-6 text-primary" />
+                Additional Documents & Files
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {allFiles.map((file: any, idx: number) => {
+                  if (!file.id) return null;
+                  return (
+                    <a 
+                      key={idx} 
+                      href={getFileUrl(file.id)} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="flex items-center justify-between p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700 hover:border-primary transition-all group"
+                    >
+                      <div className="flex items-center gap-4">
+                        <div className="size-12 rounded-xl bg-white dark:bg-slate-800 flex items-center justify-center text-slate-400 group-hover:text-primary transition-colors shadow-sm">
+                          <File className="w-6 h-6" />
+                        </div>
+                        <div className="flex flex-col">
+                          <span className="text-sm font-bold text-slate-700 dark:text-slate-200 truncate max-w-[200px]">
+                            {file.title || `Document ${idx + 1}`}
+                          </span>
+                          <span className="text-[10px] font-mono text-slate-400 uppercase tracking-widest">
+                            PDF / DOC / ZIP
+                          </span>
+                        </div>
+                      </div>
+                      <div className="size-8 rounded-lg bg-white dark:bg-slate-800 flex items-center justify-center text-slate-300 group-hover:text-primary transition-colors border border-slate-100 dark:border-slate-700">
+                        <Download className="w-4 h-4" />
+                      </div>
+                    </a>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Right Column: Inventory & Actions */}
@@ -452,74 +671,6 @@ export function ComponentDetails() {
                 </span>
               </button>
             </div>
-            {/* Additional Assets Section */}
-            {( (component as any).components_files?.length > 0 || (component as any).components_files_1?.length > 0 ) && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                {/* Image Gallery */}
-                {(component as any).components_files?.length > 0 && (
-                  <section className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm">
-                    <h3 className="text-lg font-bold mb-6 flex items-center gap-2">
-                      <ImageIcon className="w-5 h-5 text-primary" />
-                      Image Gallery
-                    </h3>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                      {(component as any).components_files.map((file: any, idx: number) => (
-                        <a 
-                          key={idx} 
-                          href={getFileUrl(file.directus_files_id)} 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className="aspect-square rounded-xl overflow-hidden border border-slate-100 dark:border-slate-800 hover:border-primary transition-all group"
-                        >
-                          <img 
-                            src={getFileUrl(file.directus_files_id)} 
-                            alt={`Additional ${idx + 1}`}
-                            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
-                            referrerPolicy="no-referrer"
-                          />
-                        </a>
-                      ))}
-                    </div>
-                  </section>
-                )}
-
-                {/* Attachments */}
-                {(component as any).components_files_1?.length > 0 && (
-                  <section className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm">
-                    <h3 className="text-lg font-bold mb-6 flex items-center gap-2">
-                      <Paperclip className="w-5 h-5 text-primary" />
-                      Attachments
-                    </h3>
-                    <div className="space-y-3">
-                      {(component as any).components_files_1.map((file: any, idx: number) => (
-                        <a 
-                          key={idx} 
-                          href={getFileUrl(file.directus_files_id)} 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700 hover:border-primary transition-all group"
-                        >
-                          <div className="flex items-center gap-3">
-                            <div className="size-10 rounded-lg bg-white dark:bg-slate-800 flex items-center justify-center text-slate-400 group-hover:text-primary transition-colors">
-                              <File className="w-5 h-5" />
-                            </div>
-                            <div className="flex flex-col">
-                              <span className="text-sm font-bold text-slate-700 dark:text-slate-200 truncate max-w-[150px]">
-                                Document {idx + 1}
-                              </span>
-                              <span className="text-[10px] font-mono text-slate-400 uppercase tracking-widest">
-                                PDF / DOC
-                              </span>
-                            </div>
-                          </div>
-                          <Download className="w-4 h-4 text-slate-300 group-hover:text-primary transition-colors" />
-                        </a>
-                      ))}
-                    </div>
-                  </section>
-                )}
-              </div>
-            )}
           </div>
         </div>
       </div>

@@ -26,7 +26,10 @@ import {
   Camera,
   Layers,
   Type,
-  Trash2
+  Trash2,
+  Cpu,
+  Battery,
+  RefreshCw
 } from "lucide-react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import BarcodeGenerator from "react-barcode";
@@ -260,6 +263,147 @@ const InductorVisual = ({ value, unit, tolerance, svgRef }: { value: string, uni
   );
 };
 
+const TransistorVisual = ({ value, svgRef }: { value: string, svgRef: React.RefObject<SVGSVGElement | null> }) => {
+  const font = "'Inter', system-ui, sans-serif";
+  return (
+    <div className="flex flex-col items-center gap-4 p-6 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-inner aspect-square justify-center">
+      <span className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">Transistor</span>
+      <svg ref={svgRef} width="240" height="240" viewBox="0 0 240 240" className="drop-shadow-md">
+        <defs>
+          <linearGradient id="transBody" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stopColor="#334155" />
+            <stop offset="100%" stopColor="#0f172a" />
+          </linearGradient>
+          <linearGradient id="transTop" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stopColor="#475569" />
+            <stop offset="100%" stopColor="#334155" />
+          </linearGradient>
+          <linearGradient id="leadGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stopColor="#94a3b8" />
+            <stop offset="50%" stopColor="#f8fafc" />
+            <stop offset="100%" stopColor="#94a3b8" />
+          </linearGradient>
+        </defs>
+        <rect width="100%" height="100%" fill="white"/>
+        <text x="120" y="30" textAnchor="middle" fontFamily={font} fontSize="14" fontWeight="900" fill="#94a3b8" style={{ letterSpacing: '0.3em' }}>TRANSISTOR</text>
+        
+        {/* Leads */}
+        <rect x="86" y="140" width="8" height="80" rx="4" fill="url(#leadGrad)" />
+        <rect x="116" y="140" width="8" height="80" rx="4" fill="url(#leadGrad)" />
+        <rect x="146" y="140" width="8" height="80" rx="4" fill="url(#leadGrad)" />
+        
+        {/* Back curve */}
+        <path d="M 60 90 C 60 40, 180 40, 180 90 Z" fill="url(#transTop)" />
+        
+        {/* Front face */}
+        <rect x="60" y="90" width="120" height="70" rx="8" fill="url(#transBody)" />
+        
+        {/* Text */}
+        <text x="120" y="130" textAnchor="middle" fontFamily={font} fontSize="22" fontWeight="700" fill="#cbd5e1" letterSpacing="1">{value || "2N3904"}</text>
+      </svg>
+      <span className="text-xl font-black text-slate-900 dark:text-white tracking-tight">{value || "Transistor"}</span>
+    </div>
+  );
+};
+
+const CapacitorVisual = ({ value, unit, type, svgRef }: { value: string, unit: string, type: string, svgRef: React.RefObject<SVGSVGElement | null> }) => {
+  const font = "'Inter', system-ui, sans-serif";
+  
+  let capContent = null;
+  if (type === 'Electrolytic') {
+    capContent = (
+      <>
+        <defs>
+          <linearGradient id="elecBody" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stopColor="#0f172a" />
+            <stop offset="20%" stopColor="#1e293b" />
+            <stop offset="80%" stopColor="#020617" />
+            <stop offset="100%" stopColor="#0f172a" />
+          </linearGradient>
+          <linearGradient id="elecTop" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#cbd5e1" />
+            <stop offset="100%" stopColor="#64748b" />
+          </linearGradient>
+          <linearGradient id="elecStripe" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stopColor="#f8fafc" />
+            <stop offset="100%" stopColor="#cbd5e1" />
+          </linearGradient>
+          <linearGradient id="leadGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stopColor="#94a3b8" />
+            <stop offset="50%" stopColor="#f8fafc" />
+            <stop offset="100%" stopColor="#94a3b8" />
+          </linearGradient>
+        </defs>
+        <rect width="100%" height="100%" fill="white"/>
+        <text x="120" y="30" textAnchor="middle" fontFamily={font} fontSize="14" fontWeight="900" fill="#94a3b8" style={{ letterSpacing: '0.3em' }}>ELECTROLYTIC</text>
+        
+        <rect x="96" y="170" width="8" height="50" rx="4" fill="url(#leadGrad)" />
+        <rect x="136" y="170" width="8" height="50" rx="4" fill="url(#leadGrad)" />
+        <path d="M 60 70 L 60 170 A 60 15 0 0 0 180 170 L 180 70 Z" fill="url(#elecBody)" />
+        <path d="M 60 70 L 60 170 A 60 15 0 0 0 85 174 L 85 74 A 60 15 0 0 1 60 70 Z" fill="url(#elecStripe)" />
+        <ellipse cx="120" cy="70" rx="60" ry="15" fill="url(#elecTop)" />
+        <text x="135" y="130" textAnchor="middle" fontFamily={font} fontSize="24" fontWeight="700" fill="#f8fafc">{value}{unit}</text>
+      </>
+    );
+  } else if (type === 'Ceramic') {
+    capContent = (
+      <>
+        <defs>
+          <radialGradient id="cerBody" cx="40%" cy="40%" r="60%">
+            <stop offset="0%" stopColor="#fbbf24" />
+            <stop offset="100%" stopColor="#d97706" />
+          </radialGradient>
+          <linearGradient id="leadGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stopColor="#94a3b8" />
+            <stop offset="50%" stopColor="#f8fafc" />
+            <stop offset="100%" stopColor="#94a3b8" />
+          </linearGradient>
+        </defs>
+        <rect x="86" y="140" width="8" height="80" rx="4" fill="url(#leadGrad)" />
+        <rect x="146" y="140" width="8" height="80" rx="4" fill="url(#leadGrad)" />
+        <path d="M 80 130 Q 90 160 94 140 Q 120 150 146 140 Q 150 160 160 130 Z" fill="url(#cerBody)" />
+        <circle cx="120" cy="100" r="60" fill="url(#cerBody)" />
+        <text x="120" y="108" textAnchor="middle" fontFamily={font} fontSize="22" fontWeight="700" fill="#78350f">{value}{unit}</text>
+      </>
+    );
+  } else {
+    capContent = (
+      <>
+        <defs>
+          <radialGradient id="tanBody" cx="30%" cy="30%" r="70%">
+            <stop offset="0%" stopColor="#fde047" />
+            <stop offset="70%" stopColor="#eab308" />
+            <stop offset="100%" stopColor="#ca8a04" />
+          </radialGradient>
+          <linearGradient id="leadGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stopColor="#94a3b8" />
+            <stop offset="50%" stopColor="#f8fafc" />
+            <stop offset="100%" stopColor="#94a3b8" />
+          </linearGradient>
+        </defs>
+        <rect x="86" y="140" width="8" height="80" rx="4" fill="url(#leadGrad)" />
+        <rect x="146" y="140" width="8" height="80" rx="4" fill="url(#leadGrad)" />
+        <path d="M 120 40 C 180 40, 190 120, 160 150 C 150 160, 90 160, 80 150 C 50 120, 60 40, 120 40 Z" fill="url(#tanBody)" />
+        <text x="120" y="115" textAnchor="middle" fontFamily={font} fontSize="22" fontWeight="700" fill="#713f12">{value}{unit}</text>
+        <path d="M 150 60 L 150 80" stroke="#a16207" strokeWidth="3" strokeLinecap="round" />
+        <path d="M 140 70 L 160 70" stroke="#a16207" strokeWidth="3" strokeLinecap="round" />
+      </>
+    );
+  }
+
+  return (
+    <div className="flex flex-col items-center gap-4 p-6 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-inner aspect-square justify-center">
+      <span className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">Capacitor</span>
+      <svg ref={svgRef} width="240" height="240" viewBox="0 0 240 240" className="drop-shadow-md">
+        <rect width="100%" height="100%" fill="white"/>
+        <text x="120" y="30" textAnchor="middle" fontFamily={font} fontSize="14" fontWeight="900" fill="#94a3b8" style={{ letterSpacing: '0.3em' }}>CAPACITOR</text>
+        {capContent}
+      </svg>
+      <span className="text-xl font-black text-slate-900 dark:text-white tracking-tight">{value}{unit}</span>
+    </div>
+  );
+};
+
 export function AddComponent() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
@@ -278,20 +422,38 @@ export function AddComponent() {
   const [settings, setSettings] = useState({ enableAiSuggestions: true });
   const [isSearchingImages, setIsSearchingImages] = useState(false);
 
-  // Resistor / Inductor Virtual Fields
+  // Resistor / Inductor / Transistor / Capacitor Virtual Fields
   const [isResistor, setIsResistor] = useState(false);
   const [isInductor, setIsInductor] = useState(false);
+  const [isTransistor, setIsTransistor] = useState(false);
+  const [isCapacitor, setIsCapacitor] = useState(false);
+  const [capacitorType, setCapacitorType] = useState<'Electrolytic' | 'Tantalum' | 'Ceramic'>('Ceramic');
   const [bandCount, setBandCount] = useState(4);
   const [resistorValue, setResistorValue] = useState("");
   const [inductanceValue, setInductanceValue] = useState("");
+  const [transistorValue, setTransistorValue] = useState("");
+  const [capacitorValue, setCapacitorValue] = useState("");
   const [tolerance, setTolerance] = useState("5%");
   const [tempCo, setTempCo] = useState("100ppm");
   const [resistorUnit, setResistorUnit] = useState("Ω");
   const [inductorUnit, setInductorUnit] = useState("µH");
+  const [transistorUnit, setTransistorUnit] = useState("");
+  const [capacitorUnit, setCapacitorUnit] = useState("µF");
   const [isBatchMode, setIsBatchMode] = useState(false);
-  const [batchItems, setBatchItems] = useState<{ value: string; quantity: number; unit: string }[]>([{ value: "", quantity: 1, unit: "" }]);
+  const generateRandomBarcode = () => {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    let result = '';
+    for (let i = 0; i < 8; i++) {
+      result += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return result;
+  };
+
+  const [batchItems, setBatchItems] = useState<{ value: string; quantity: number; unit: string; barcode?: string }[]>([{ value: "", quantity: 1, unit: "" }]);
   const resistorSvgRef = useRef<SVGSVGElement>(null);
   const inductorSvgRef = useRef<SVGSVGElement>(null);
+  const transistorSvgRef = useRef<SVGSVGElement>(null);
+  const capacitorSvgRef = useRef<SVGSVGElement>(null);
 
   const svgToBlob = (svgElement: SVGSVGElement): Promise<Blob> => {
     return new Promise((resolve, reject) => {
@@ -899,7 +1061,7 @@ export function AddComponent() {
     const toleranceColor = TOLERANCE_MAP[tolerance] || "#C0C0C0";
     
     return `
-      <svg xmlns="http://www.w3.org/2000/svg" width="240" height="240" viewBox="0 0 240 240">
+      <svg xmlns="http://www.w3.org/2000/svg" width="800" height="800" viewBox="0 0 240 240">
         <defs>
           <linearGradient id="inductorBodyGrad" x1="0%" y1="0%" x2="0%" y2="100%">
             <stop offset="0%" stop-color="#bbf7bb" />
@@ -947,6 +1109,133 @@ export function AddComponent() {
     `;
   };
 
+  const getTransistorSvgString = (value: string) => {
+    const font = "'Inter', system-ui, sans-serif";
+    return `
+      <svg xmlns="http://www.w3.org/2000/svg" width="800" height="800" viewBox="0 0 240 240">
+        <defs>
+          <linearGradient id="transBody" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stop-color="#334155" />
+            <stop offset="100%" stop-color="#0f172a" />
+          </linearGradient>
+          <linearGradient id="transTop" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stop-color="#475569" />
+            <stop offset="100%" stop-color="#334155" />
+          </linearGradient>
+          <linearGradient id="leadGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stop-color="#94a3b8" />
+            <stop offset="50%" stop-color="#f8fafc" />
+            <stop offset="100%" stop-color="#94a3b8" />
+          </linearGradient>
+        </defs>
+        <rect width="100%" height="100%" fill="white"/>
+        <text x="120" y="30" text-anchor="middle" font-family="${font}" font-size="14" font-weight="900" fill="#94a3b8" style="letter-spacing: 0.3em">TRANSISTOR</text>
+        
+        <!-- Leads -->
+        <rect x="86" y="140" width="8" height="80" rx="4" fill="url(#leadGrad)" />
+        <rect x="116" y="140" width="8" height="80" rx="4" fill="url(#leadGrad)" />
+        <rect x="146" y="140" width="8" height="80" rx="4" fill="url(#leadGrad)" />
+        
+        <!-- Back curve -->
+        <path d="M 60 90 C 60 40, 180 40, 180 90 Z" fill="url(#transTop)" />
+        
+        <!-- Front face -->
+        <path d="M 60 90 H 180 V 152 Q 180 160 172 160 H 68 Q 60 160 60 152 Z" fill="url(#transBody)" />
+        
+        <!-- Text -->
+        <text x="120" y="130" text-anchor="middle" font-family="${font}" font-size="22" font-weight="700" fill="#cbd5e1" letter-spacing="1">${value || "2N3904"}</text>
+      </svg>
+    `;
+  };
+
+  const getCapacitorSvgString = (value: string, unit: string, type: string) => {
+    const font = "'Inter', system-ui, sans-serif";
+    let capContent = '';
+
+    if (type === 'Electrolytic') {
+      capContent = `
+        <defs>
+          <linearGradient id="elecBody" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stop-color="#0f172a" />
+            <stop offset="20%" stop-color="#1e293b" />
+            <stop offset="80%" stop-color="#020617" />
+            <stop offset="100%" stop-color="#0f172a" />
+          </linearGradient>
+          <linearGradient id="elecTop" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#cbd5e1" />
+            <stop offset="100%" stop-color="#64748b" />
+          </linearGradient>
+          <linearGradient id="elecStripe" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stop-color="#f8fafc" />
+            <stop offset="100%" stop-color="#cbd5e1" />
+          </linearGradient>
+          <linearGradient id="leadGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stop-color="#94a3b8" />
+            <stop offset="50%" stop-color="#f8fafc" />
+            <stop offset="100%" stop-color="#94a3b8" />
+          </linearGradient>
+        </defs>
+        <rect width="100%" height="100%" fill="white"/>
+        <text x="120" y="30" text-anchor="middle" font-family="${font}" font-size="14" font-weight="900" fill="#94a3b8" style="letter-spacing: 0.3em">ELECTROLYTIC</text>
+
+        <rect x="96" y="170" width="8" height="50" rx="4" fill="url(#leadGrad)" />
+        <rect x="136" y="170" width="8" height="50" rx="4" fill="url(#leadGrad)" />
+        <path d="M 60 70 L 60 170 A 60 15 0 0 0 180 170 L 180 70 Z" fill="url(#elecBody)" />
+        <path d="M 60 70 L 60 170 A 60 15 0 0 0 85 174 L 85 74 A 60 15 0 0 1 60 70 Z" fill="url(#elecStripe)" />
+        <ellipse cx="120" cy="70" rx="60" ry="15" fill="url(#elecTop)" />
+        <text x="135" y="130" text-anchor="middle" font-family="${font}" font-size="24" font-weight="700" fill="#f8fafc">${value}${unit}</text>
+      `;
+    } else if (type === 'Ceramic') {
+      capContent = `
+        <defs>
+          <radialGradient id="cerBody" cx="40%" cy="40%" r="60%">
+            <stop offset="0%" stop-color="#fbbf24" />
+            <stop offset="100%" stop-color="#d97706" />
+          </radialGradient>
+          <linearGradient id="leadGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stop-color="#94a3b8" />
+            <stop offset="50%" stop-color="#f8fafc" />
+            <stop offset="100%" stop-color="#94a3b8" />
+          </linearGradient>
+        </defs>
+        <rect x="86" y="140" width="8" height="80" rx="4" fill="url(#leadGrad)" />
+        <rect x="146" y="140" width="8" height="80" rx="4" fill="url(#leadGrad)" />
+        <path d="M 80 130 Q 90 160 94 140 Q 120 150 146 140 Q 150 160 160 130 Z" fill="url(#cerBody)" />
+        <circle cx="120" cy="100" r="60" fill="url(#cerBody)" />
+        <text x="120" y="108" text-anchor="middle" font-family="${font}" font-size="22" font-weight="700" fill="#78350f">${value}${unit}</text>
+      `;
+    } else {
+      capContent = `
+        <defs>
+          <radialGradient id="tanBody" cx="30%" cy="30%" r="70%">
+            <stop offset="0%" stop-color="#fde047" />
+            <stop offset="70%" stop-color="#eab308" />
+            <stop offset="100%" stop-color="#ca8a04" />
+          </radialGradient>
+          <linearGradient id="leadGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stop-color="#94a3b8" />
+            <stop offset="50%" stop-color="#f8fafc" />
+            <stop offset="100%" stop-color="#94a3b8" />
+          </linearGradient>
+        </defs>
+        <rect x="86" y="140" width="8" height="80" rx="4" fill="url(#leadGrad)" />
+        <rect x="146" y="140" width="8" height="80" rx="4" fill="url(#leadGrad)" />
+        <path d="M 120 40 C 180 40, 190 120, 160 150 C 150 160, 90 160, 80 150 C 50 120, 60 40, 120 40 Z" fill="url(#tanBody)" />
+        <text x="120" y="115" text-anchor="middle" font-family="${font}" font-size="22" font-weight="700" fill="#713f12">${value}${unit}</text>
+        <path d="M 150 60 L 150 80" stroke="#a16207" stroke-width="3" stroke-linecap="round" />
+        <path d="M 140 70 L 160 70" stroke="#a16207" stroke-width="3" stroke-linecap="round" />
+      `;
+    }
+
+    return `
+      <svg xmlns="http://www.w3.org/2000/svg" width="800" height="800" viewBox="0 0 240 240">
+        <rect width="100%" height="100%" fill="white"/>
+        <text x="120" y="30" text-anchor="middle" font-family="${font}" font-size="14" font-weight="900" fill="#94a3b8" style="letter-spacing: 0.3em">CAPACITOR</text>
+        ${capContent}
+      </svg>
+    `;
+  };
+
   const svgStringToBlob = (svgString: string): Promise<Blob> => {
     return new Promise((resolve, reject) => {
       const img = new Image();
@@ -975,9 +1264,10 @@ export function AddComponent() {
     });
   };
 
+  const isProcedural = isResistor || isInductor || isTransistor || isCapacitor;
+
   const handleSave = async () => {
     // Validation
-    const isProcedural = isResistor || isInductor;
     if (!formData.name || !formData.category || !formData.description || tags.length === 0 || !formData.storageLocation) {
       toast.error("Please fill in all required fields (Name, Category, Description, Keywords, Storage Location).");
       return;
@@ -994,9 +1284,10 @@ export function AddComponent() {
       const itemsToSave = isBatchMode 
         ? batchItems.filter(i => i.value.trim())
         : [{ 
-            value: isResistor ? resistorValue : (isInductor ? inductanceValue : ""), 
+            value: isResistor ? resistorValue : (isInductor ? inductanceValue : (isTransistor ? transistorValue : (isCapacitor ? capacitorValue : ""))), 
             quantity: Number(formData.quantity),
-            unit: isResistor ? resistorUnit : (isInductor ? inductorUnit : "")
+            unit: isResistor ? resistorUnit : (isInductor ? inductorUnit : (isTransistor ? "" : (isCapacitor ? capacitorUnit : ""))),
+            type: isCapacitor ? capacitorType : undefined
           }];
 
       if (itemsToSave.length === 0) {
@@ -1007,18 +1298,63 @@ export function AddComponent() {
       let current = 0;
       setUploadProgress({ current: 0, total });
 
+      let uploadedMainImageId = existingMainImage;
+      let uploadedDatasheetId = existingDatasheet;
+
+      // Upload files once if not procedural
+      if (!isProcedural) {
+        if (mainImage) {
+          const mainImageFormData = new FormData();
+          mainImageFormData.append('file', mainImage);
+          const mainImageRes = await directus.request(uploadFiles(mainImageFormData));
+          uploadedMainImageId = (mainImageRes as any).id;
+        }
+        if (datasheet) {
+          const datasheetFormData = new FormData();
+          datasheetFormData.append('file', datasheet);
+          const datasheetRes = await directus.request(uploadFiles(datasheetFormData));
+          uploadedDatasheetId = (datasheetRes as any).id;
+        }
+      }
+
+      // Upload additional files once
+      const uploadedAdditionalImageIds: string[] = [];
+      const uploadedAdditionalFileIds: string[] = [];
+
+      if (additionalImages.length > 0) {
+        for (const file of additionalImages) {
+          const fileData = new FormData();
+          fileData.append('file', file);
+          const fileRes = await directus.request(uploadFiles(fileData));
+          uploadedAdditionalImageIds.push((fileRes as any).id);
+        }
+      }
+
+      if (additionalFiles.length > 0) {
+        for (const file of additionalFiles) {
+          const fileData = new FormData();
+          fileData.append('file', file);
+          const fileRes = await directus.request(uploadFiles(fileData));
+          uploadedAdditionalFileIds.push((fileRes as any).id);
+        }
+      }
+
       for (const item of itemsToSave) {
         current++;
         setUploadProgress({ current, total });
-        let mainImageId = existingMainImage;
-        let datasheetId = existingDatasheet;
+        let mainImageId = uploadedMainImageId;
+        let datasheetId = uploadedDatasheetId;
 
-        // 1. Generate and Upload Procedural Image if needed
+        // 1. Generate and Upload Procedural Image if needed (this must be per item as values differ)
         if (isProcedural) {
-          const itemUnit = (item as any).unit || (isResistor ? resistorUnit : inductorUnit);
+          const itemUnit = (item as any).unit || (isResistor ? resistorUnit : (isInductor ? inductorUnit : ""));
           const svgString = isResistor 
             ? getResistorSvgString(item.value, itemUnit, tolerance, tempCo, bandCount) 
-            : getInductorSvgString(item.value, itemUnit, tolerance);
+            : (isInductor 
+                ? getInductorSvgString(item.value, itemUnit, tolerance)
+                : (isTransistor
+                    ? getTransistorSvgString(item.value)
+                    : getCapacitorSvgString(item.value, itemUnit, (item as any).type || capacitorType)));
           
           const blob = await svgStringToBlob(svgString);
           const file = new File([blob], `${item.value.replace(/[^a-z0-9]/gi, '_')}.png`, { type: "image/png" });
@@ -1029,20 +1365,6 @@ export function AddComponent() {
           mainImageId = (imageRes as any).id;
           // Duplicate as datasheet
           datasheetId = mainImageId;
-        } else if (mainImage) {
-          // Upload Main Image if new one selected
-          const mainImageFormData = new FormData();
-          mainImageFormData.append('file', mainImage);
-          const mainImageRes = await directus.request(uploadFiles(mainImageFormData));
-          mainImageId = (mainImageRes as any).id;
-        }
-
-        // 2. Upload Datasheet if new one selected (only if not procedural)
-        if (datasheet && !isProcedural) {
-          const datasheetFormData = new FormData();
-          datasheetFormData.append('file', datasheet);
-          const datasheetRes = await directus.request(uploadFiles(datasheetFormData));
-          datasheetId = (datasheetRes as any).id;
         }
 
         // 3. Create or Update Component
@@ -1052,11 +1374,11 @@ export function AddComponent() {
           quantity_available: item.quantity,
           location: formData.storageLocation && formData.storageLocation !== "0" ? formData.storageLocation : null,
           url: formData.referenceUrl || null,
-          keywords: [...tags, ...(isResistor ? ['resistor', item.value] : (isInductor ? ['inductor', item.value] : []))],
+          keywords: [...tags, ...(isResistor ? ['resistor', item.value] : (isInductor ? ['inductor', item.value] : (isTransistor ? ['transistor', item.value] : (isCapacitor ? ['capacitor', item.value] : []))))],
           packet_reference: formData.packetReference || null,
           package: formData.pkg && formData.pkg !== "0" ? Number(formData.pkg) : null,
           type: formData.category && formData.category !== "0" ? Number(formData.category) : null,
-          barcode: barcodes.length > 0 ? barcodes.join(';') : null,
+          barcode: isBatchMode ? ((item as any).barcode || null) : (barcodes.length > 0 ? barcodes.join(';') : null),
         };
 
         if (mainImageId) {
@@ -1066,7 +1388,7 @@ export function AddComponent() {
           componentData.datasheet = datasheetId;
         }
 
-        let componentId = id ? Number(id) : null;
+        let componentId: string | number | null = id ? Number(id) : null;
 
         if (isEditMode && id && !isBatchMode) {
           await directus.request(updateItem('components', Number(id), componentData));
@@ -1075,30 +1397,22 @@ export function AddComponent() {
           componentId = (newComponentRes as any).id;
         }
 
-        // 4. Upload Additional Images & Create Relations
-        if (additionalImages.length > 0 && componentId) {
-          for (const file of additionalImages) {
-            const fileData = new FormData();
-            fileData.append('file', file);
-            const fileRes = await directus.request(uploadFiles(fileData));
-            
+        // 4. Create Relations for Additional Images
+        if (uploadedAdditionalImageIds.length > 0 && componentId) {
+          for (const fileId of uploadedAdditionalImageIds) {
             await directus.request(createItem('components_files', {
-              components_id: componentId,
-              directus_files_id: (fileRes as any).id
+              components_id: Number(componentId),
+              directus_files_id: fileId
             }));
           }
         }
 
-        // 5. Upload Additional Files & Create Relations
-        if (additionalFiles.length > 0 && componentId) {
-          for (const file of additionalFiles) {
-            const fileData = new FormData();
-            fileData.append('file', file);
-            const fileRes = await directus.request(uploadFiles(fileData));
-            
+        // 5. Create Relations for Additional Files
+        if (uploadedAdditionalFileIds.length > 0 && componentId) {
+          for (const fileId of uploadedAdditionalFileIds) {
             await directus.request(createItem('components_files_1', {
-              components_id: componentId,
-              directus_files_id: (fileRes as any).id
+              components_id: Number(componentId),
+              directus_files_id: fileId
             }));
           }
         }
@@ -1170,22 +1484,38 @@ export function AddComponent() {
                 </div>
                 <div className="space-y-6">
                   {/* Virtual Fields for Resistors/Inductors */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700">
                     <button
                       type="button"
-                      onClick={() => { setIsResistor(!isResistor); setIsInductor(false); }}
+                      onClick={() => { setIsResistor(!isResistor); setIsInductor(false); setIsTransistor(false); setIsCapacitor(false); }}
                       className={`flex items-center justify-center gap-2 p-3 rounded-lg border transition-all ${isResistor ? 'bg-primary text-white border-primary shadow-md' : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-800'}`}
                     >
                       <Zap className="w-4 h-4" />
-                      <span className="text-xs font-bold uppercase tracking-wider">Resistor Mode</span>
+                      <span className="text-xs font-bold uppercase tracking-wider">Resistor</span>
                     </button>
                     <button
                       type="button"
-                      onClick={() => { setIsInductor(!isInductor); setIsResistor(false); }}
+                      onClick={() => { setIsInductor(!isInductor); setIsResistor(false); setIsTransistor(false); setIsCapacitor(false); }}
                       className={`flex items-center justify-center gap-2 p-3 rounded-lg border transition-all ${isInductor ? 'bg-primary text-white border-primary shadow-md' : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-800'}`}
                     >
                       <Activity className="w-4 h-4" />
-                      <span className="text-xs font-bold uppercase tracking-wider">Inductor Mode</span>
+                      <span className="text-xs font-bold uppercase tracking-wider">Inductor</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setIsTransistor(!isTransistor); setIsResistor(false); setIsInductor(false); setIsCapacitor(false); }}
+                      className={`flex items-center justify-center gap-2 p-3 rounded-lg border transition-all ${isTransistor ? 'bg-primary text-white border-primary shadow-md' : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-800'}`}
+                    >
+                      <Cpu className="w-4 h-4" />
+                      <span className="text-xs font-bold uppercase tracking-wider">Transistor</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setIsCapacitor(!isCapacitor); setIsResistor(false); setIsInductor(false); setIsTransistor(false); }}
+                      className={`flex items-center justify-center gap-2 p-3 rounded-lg border transition-all ${isCapacitor ? 'bg-primary text-white border-primary shadow-md' : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-800'}`}
+                    >
+                      <Battery className="w-4 h-4" />
+                      <span className="text-xs font-bold uppercase tracking-wider">Capacitor</span>
                     </button>
                     <button
                       type="button"
@@ -1198,8 +1528,8 @@ export function AddComponent() {
                   </div>
 
                   {/* Dynamic Inputs */}
-                  {(isResistor || isInductor) && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-6 bg-primary/5 rounded-xl border border-primary/20 animate-in fade-in slide-in-from-top-2 duration-300">
+                  {(isResistor || isInductor || isTransistor || isCapacitor) && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-6 bg-primary/5 rounded-2xl border border-primary/20 animate-in fade-in duration-300">
                       {isResistor && (
                         <>
                           <div className="flex flex-col gap-2">
@@ -1303,17 +1633,84 @@ export function AddComponent() {
                           )}
                         </>
                       )}
+                      {isTransistor && (
+                        <div className="flex flex-col gap-2">
+                          <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Transistor Model</label>
+                          <input 
+                            type="text" 
+                            value={transistorValue}
+                            onChange={(e) => setTransistorValue(e.target.value)}
+                            placeholder="e.g. 2N2222"
+                            className={`form-input w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white h-11 px-4 text-sm ${focusClasses}`}
+                          />
+                        </div>
+                      )}
+                      {isCapacitor && (
+                        <>
+                          <div className="flex flex-col gap-2">
+                            <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Capacitor Type</label>
+                            <select 
+                              value={capacitorType}
+                              onChange={(e) => setCapacitorType(e.target.value as any)}
+                              className={`form-select w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white h-11 px-4 text-sm ${focusClasses}`}
+                            >
+                              <option value="Electrolytic">Electrolytic</option>
+                              <option value="Tantalum">Tantalum</option>
+                              <option value="Ceramic">Ceramic</option>
+                            </select>
+                          </div>
+                          {!isBatchMode && (
+                            <div className="flex flex-col gap-2">
+                              <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Capacitance Value</label>
+                              <div className="flex gap-2">
+                                <input 
+                                  type="text" 
+                                  value={capacitorValue}
+                                  onChange={(e) => setCapacitorValue(e.target.value)}
+                                  placeholder="e.g. 10"
+                                  className={`form-input w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white h-11 px-4 text-sm ${focusClasses}`}
+                                />
+                                <select 
+                                  value={capacitorUnit}
+                                  onChange={(e) => setCapacitorUnit(e.target.value)}
+                                  className={`form-select w-24 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white h-11 px-2 text-sm ${focusClasses}`}
+                                >
+                                  <option value="µF">µF</option>
+                                  <option value="nF">nF</option>
+                                  <option value="pF">pF</option>
+                                </select>
+                              </div>
+                            </div>
+                          )}
+                        </>
+                      )}
                     {isBatchMode && (
                       <div className="md:col-span-2 space-y-4">
                         <div className="flex justify-between items-center">
                           <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Batch Items</label>
-                          <button 
-                            type="button"
-                            onClick={() => setBatchItems([...batchItems, { value: "", quantity: 1, unit: isResistor ? resistorUnit : (isInductor ? inductorUnit : "") }])}
-                            className="flex items-center gap-1 text-xs font-bold text-primary hover:underline"
-                          >
-                            <Plus className="w-3 h-3" /> Add Item
-                          </button>
+                          <div className="flex gap-3">
+                            <button 
+                              type="button"
+                              onClick={() => {
+                                const newItems = batchItems.map(item => ({
+                                  ...item,
+                                  barcode: item.barcode || generateRandomBarcode()
+                                }));
+                                setBatchItems(newItems);
+                                toast.success("Generated barcodes for all items");
+                              }}
+                              className="flex items-center gap-1 text-xs font-bold text-slate-500 hover:text-primary transition-colors"
+                            >
+                              <RefreshCw className="w-3 h-3" /> Generate All Barcodes
+                            </button>
+                            <button 
+                              type="button"
+                              onClick={() => setBatchItems([...batchItems, { value: "", quantity: 1, unit: isResistor ? resistorUnit : (isInductor ? inductorUnit : (isTransistor ? "" : (isCapacitor ? capacitorUnit : ""))) }])}
+                              className="flex items-center gap-1 text-xs font-bold text-primary hover:underline"
+                            >
+                              <Plus className="w-3 h-3" /> Add Item
+                            </button>
+                          </div>
                         </div>
                         <div className="space-y-3">
                           {batchItems.map((item, index) => (
@@ -1331,30 +1728,38 @@ export function AddComponent() {
                                     placeholder="e.g. 10"
                                     className={`form-input flex-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white h-10 px-3 text-sm ${focusClasses}`}
                                   />
-                                  <select
-                                    value={item.unit || (isResistor ? resistorUnit : inductorUnit)}
-                                    onChange={(e) => {
-                                      const newItems = [...batchItems];
-                                      newItems[index].unit = e.target.value;
-                                      setBatchItems(newItems);
-                                    }}
-                                    className={`form-select w-20 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white h-10 px-1 text-xs ${focusClasses}`}
-                                  >
-                                    {isResistor ? (
-                                      <>
-                                        <option value="Ω">Ω</option>
-                                        <option value="kΩ">kΩ</option>
-                                        <option value="MΩ">MΩ</option>
-                                      </>
-                                    ) : (
-                                      <>
-                                        <option value="nH">nH</option>
-                                        <option value="µH">µH</option>
-                                        <option value="mH">mH</option>
-                                        <option value="H">H</option>
-                                      </>
-                                    )}
-                                  </select>
+                                  {isProcedural && !isTransistor && (
+                                    <select
+                                      value={item.unit || (isResistor ? resistorUnit : (isInductor ? inductorUnit : (isCapacitor ? capacitorUnit : "")))}
+                                      onChange={(e) => {
+                                        const newItems = [...batchItems];
+                                        newItems[index].unit = e.target.value;
+                                        setBatchItems(newItems);
+                                      }}
+                                      className={`form-select w-20 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white h-10 px-1 text-xs ${focusClasses}`}
+                                    >
+                                      {isResistor ? (
+                                        <>
+                                          <option value="Ω">Ω</option>
+                                          <option value="kΩ">kΩ</option>
+                                          <option value="MΩ">MΩ</option>
+                                        </>
+                                      ) : isInductor ? (
+                                        <>
+                                          <option value="nH">nH</option>
+                                          <option value="µH">µH</option>
+                                          <option value="mH">mH</option>
+                                          <option value="H">H</option>
+                                        </>
+                                      ) : isCapacitor ? (
+                                        <>
+                                          <option value="pF">pF</option>
+                                          <option value="nF">nF</option>
+                                          <option value="µF">µF</option>
+                                        </>
+                                      ) : null}
+                                    </select>
+                                  )}
                                 </div>
                               </div>
                               <div className="w-20 flex flex-col gap-1.5">
@@ -1369,6 +1774,33 @@ export function AddComponent() {
                                   }}
                                   className={`form-input w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white h-10 px-3 text-sm ${focusClasses}`}
                                 />
+                              </div>
+                              <div className="w-32 flex flex-col gap-1.5">
+                                <label className="text-[10px] uppercase font-bold text-slate-400">Barcode</label>
+                                <div className="relative">
+                                  <input 
+                                    value={item.barcode || ""}
+                                    onChange={(e) => {
+                                      const newItems = [...batchItems];
+                                      newItems[index].barcode = e.target.value;
+                                      setBatchItems(newItems);
+                                    }}
+                                    placeholder="SKU..."
+                                    className={`form-input w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white h-10 pl-3 pr-8 text-xs font-mono ${focusClasses}`}
+                                  />
+                                  <button 
+                                    type="button"
+                                    onClick={() => {
+                                      const newItems = [...batchItems];
+                                      newItems[index].barcode = generateRandomBarcode();
+                                      setBatchItems(newItems);
+                                    }}
+                                    className="absolute right-1 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-primary transition-colors"
+                                    title="Generate Barcode"
+                                  >
+                                    <RefreshCw className="w-3 h-3" />
+                                  </button>
+                                </div>
                               </div>
                               <button 
                                 type="button"
@@ -1585,6 +2017,18 @@ export function AddComponent() {
                         tolerance={tolerance}
                         svgRef={inductorSvgRef} 
                       />
+                    ) : isTransistor ? (
+                      <TransistorVisual 
+                        value={isBatchMode ? "Batch Mode" : transistorValue} 
+                        svgRef={transistorSvgRef} 
+                      />
+                    ) : isCapacitor ? (
+                      <CapacitorVisual 
+                        value={isBatchMode ? "Batch Mode" : capacitorValue} 
+                        unit={capacitorUnit}
+                        type={capacitorType}
+                        svgRef={capacitorSvgRef} 
+                      />
                     ) : (
                       <div 
                         onClick={() => mainImageRef.current?.click()}
@@ -1774,23 +2218,25 @@ export function AddComponent() {
                   <h2 className="text-lg font-bold text-slate-900 dark:text-white">Logistics</h2>
                 </div>
                 <div className="space-y-5">
-                  <div className="flex flex-col gap-2">
-                    <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Quantity Available</label>
-                    <div className="relative">
-                      <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400">
-                        <Hash className="w-5 h-5" />
-                      </span>
-                      <input
-                        name="quantity"
-                        value={formData.quantity}
-                        onChange={handleInputChange}
-                        className={`form-input w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white h-12 pl-10 pr-4 text-base ${focusClasses}`}
-                        placeholder="0"
-                        type="number"
-                        min="0"
-                      />
+                  {!isBatchMode && (
+                    <div className="flex flex-col gap-2">
+                      <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Quantity Available</label>
+                      <div className="relative">
+                        <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400">
+                          <Hash className="w-5 h-5" />
+                        </span>
+                        <input
+                          name="quantity"
+                          value={formData.quantity}
+                          onChange={handleInputChange}
+                          className={`form-input w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white h-12 pl-10 pr-4 text-base ${focusClasses}`}
+                          placeholder="0"
+                          type="number"
+                          min="0"
+                        />
+                      </div>
                     </div>
-                  </div>
+                  )}
                   <div className="flex flex-col gap-2">
                     <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Storage Location <span className="text-red-500">*</span></label>
                     <div className="relative">
@@ -1839,20 +2285,35 @@ export function AddComponent() {
                             <Barcode className="w-4 h-4" />
                           </span>
                           <input
-                            className="w-full bg-transparent border-none focus:ring-0 text-sm h-8 pl-7 pr-8 outline-none font-mono"
+                            className="w-full bg-transparent border-none focus:ring-0 text-sm h-8 pl-7 pr-16 outline-none font-mono"
                             placeholder="Scan or enter barcode..."
                             type="text"
                             value={barcodeInput}
                             onChange={(e) => setBarcodeInput(e.target.value)}
                             onKeyDown={handleBarcodeKeyDown}
                           />
-                          <button 
-                            onClick={() => setShowScanner(true)}
-                            className="absolute right-1 p-1 text-slate-400 hover:text-primary transition-colors sm:hidden"
-                            title="Scan with Camera"
-                          >
-                            <Camera className="w-4 h-4" />
-                          </button>
+                          <div className="absolute right-1 flex items-center gap-1">
+                            <button 
+                              onClick={() => {
+                                const newCode = generateRandomBarcode();
+                                if (!barcodes.includes(newCode)) {
+                                  setBarcodes([...barcodes, newCode]);
+                                  toast.success(`Generated barcode: ${newCode}`);
+                                }
+                              }}
+                              className="p-1 text-slate-400 hover:text-primary transition-colors"
+                              title="Generate Random Barcode"
+                            >
+                              <RefreshCw className="w-4 h-4" />
+                            </button>
+                            <button 
+                              onClick={() => setShowScanner(true)}
+                              className="p-1 text-slate-400 hover:text-primary transition-colors sm:hidden"
+                              title="Scan with Camera"
+                            >
+                              <Camera className="w-4 h-4" />
+                            </button>
+                          </div>
                         </div>
                       </div>
                       <div className="bg-slate-50 dark:bg-slate-900/50 rounded-xl p-6 flex flex-col items-center justify-center gap-4 border border-slate-200 dark:border-slate-800 min-h-[160px] overflow-hidden">
