@@ -31,7 +31,7 @@ async function startServer() {
   app.use(
     '/directus',
     createProxyMiddleware({
-      target: 'http://coqs.freeboxos.fr:16400',
+      target: defaultSettings.directusUrl,
       changeOrigin: true,
       pathRewrite: {
         '^/directus': '', // remove /directus prefix
