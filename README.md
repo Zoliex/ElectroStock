@@ -35,9 +35,24 @@ Before you begin, ensure you have met the following requirements:
 3. Configure Environment Variables:
    Create a `.env` file in the root directory and add the following variables:
    ```env
-   VITE_DIRECTUS_URL=https://your-directus-instance.com
-   GEMINI_API_KEY=your_gemini_api_key
-   SERPAPI_API_KEY=your_serpapi_key
+   # Configuration des ports
+   HTTP_PORT=3000
+   HTTPS_PORT=3300
+
+   # Chemins vers tes certificats SSL (chemins absolus ou relatifs au répertoire du projet)
+   SSL_KEY_PATH=./certs/key.pem
+   SSL_CERT_PATH=./certs/cert.pem
+
+   # GEMINI_API_KEY: Required for Gemini AI API calls.
+   # AI Studio automatically injects this at runtime from user secrets.
+   # Users configure this via the Secrets panel in the AI Studio UI.
+   GEMINI_API_KEY=""
+
+   # SerpApi key for image search
+   SERPAPI_API_KEY=""
+
+   VITE_DIRECTUS_URL="http://[IP_ADDRESS]/"
+
    ```
 
 ## Running the Application

@@ -4,6 +4,8 @@ import axios from "axios";
 import dotenv from "dotenv";
 import fs from "fs";
 import path from "path";
+import http from "http";
+import https from "https";
 import { GoogleGenAI } from "@google/genai";
 import { createProxyMiddleware } from "http-proxy-middleware";
 
@@ -19,7 +21,10 @@ const defaultSettings = {
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+
+  // Récupération des ports depuis le fichier .env (ou valeurs par défaut)
+  const HTTP_PORT = Number(process.env.HTTP_PORT) || 3000;
+  const HTTPS_PORT = Number(process.env.HTTPS_PORT) || 3300;
 
   // Request logging middleware
   app.use((req, res, next) => {
@@ -115,14 +120,14 @@ async function startServer() {
       });
 
       if (!response.data.error) {
-        const matches = response.data.images_results.map((result: any) => ({
+        const matches = response.data.images_results.map((result) => ({
           url: result.original,
           title: result.title
         }));
         return res.json(matches);
       }
       return res.json([]);
-    } catch (error: any) {
+    } catch (error) {
       console.error("[API] SerpApi failed", error.message);
       res.status(500).json({ error: "Failed to fetch images." });
     }
@@ -145,7 +150,7 @@ async function startServer() {
 
     try {
       const ai = new GoogleGenAI({ apiKey: keyToUse });
-      
+
       const response = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
         contents: `Research the electronic component named "${name}". 
@@ -185,14 +190,14 @@ async function startServer() {
       });
 
       const data = JSON.parse(response.text || "{}");
-      
+
       // Fix potential double-escaped newlines from Gemini
       if (data.description) {
         data.description = data.description.replace(/\\n/g, '\n');
       }
 
       res.json(data);
-    } catch (error: any) {
+    } catch (error) {
       console.error("[API] AI Research failed", error);
       res.status(500).json({ error: "Failed to research component." });
     }
@@ -212,9 +217,35 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://localhost:${PORT}`);
+  // --- Lancement des serveurs HTTP et HTTPS ---
+
+  // 1. Démarrage du serveur HTTP
+  const httpServer = http.createServer(app);
+  httpServer.listen(HTTP_PORT, "0.0.0.0", () => {
+    console.log(`[Server] Serveur HTTP démarré sur http://localhost:${HTTP_PORT}`);
   });
+
+  // 2. Vérification des certificats et démarrage du serveur HTTPS
+  const sslKeyPath = process.env.SSL_KEY_PATH;
+  const sslCertPath = process.env.SSL_CERT_PATH;
+
+  if (sslKeyPath && sslCertPath && fs.existsSync(sslKeyPath) && fs.existsSync(sslCertPath)) {
+    try {
+      const httpsOptions = {
+        key: fs.readFileSync(sslKeyPath, 'utf8'),
+        cert: fs.readFileSync(sslCertPath, 'utf8')
+      };
+
+      const httpsServer = https.createServer(httpsOptions, app);
+      httpsServer.listen(HTTPS_PORT, "0.0.0.0", () => {
+        console.log(`[Server] Serveur HTTPS démarré sur https://localhost:${HTTPS_PORT}`);
+      });
+    } catch (error) {
+      console.error("[Server] Erreur lors de la lecture des certificats SSL :", error);
+    }
+  } else {
+    console.warn(`[Server] Serveur HTTPS ignoré : Chemins SSL invalides ou manquants dans .env`);
+  }
 }
 
 startServer();
