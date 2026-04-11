@@ -92,3 +92,6 @@ git commit -m "fix: resolve print preview overflow issue on batch barcodes page"
 ## License
 
 This project is licensed under the MIT License.
+
+CREATE A PROXY FOR HTTPS ON TAILSCALE
+`sudo tailscale serve --bg --https=[HTTPS_PORT] http://[IP_ADDRESS]:[HTTP_PORT]`
