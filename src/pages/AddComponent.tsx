@@ -278,38 +278,28 @@ const TransistorVisual = ({ value, svgRef }: { value: string, svgRef: React.RefO
             <stop offset="0%" stopColor="#475569" />
             <stop offset="100%" stopColor="#334155" />
           </linearGradient>
-          <linearGradient id="leadGradT" x1="0%" y1="0%" x2="100%" y2="0%">
+          <linearGradient id="leadGrad" x1="0%" y1="0%" x2="100%" y2="0%">
             <stop offset="0%" stopColor="#94a3b8" />
             <stop offset="50%" stopColor="#f8fafc" />
             <stop offset="100%" stopColor="#94a3b8" />
           </linearGradient>
-          <radialGradient id="transShine" cx="30%" cy="20%" r="60%">
-            <stop offset="0%" stopColor="#64748b" stopOpacity="0.6" />
-            <stop offset="100%" stopColor="#0f172a" stopOpacity="0" />
-          </radialGradient>
         </defs>
         <rect width="100%" height="100%" fill="white" />
         <text x="120" y="30" textAnchor="middle" fontFamily={font} fontSize="14" fontWeight="900" fill="#94a3b8" style={{ letterSpacing: '0.3em' }}>TRANSISTOR</text>
 
         {/* Leads */}
-        <rect x="86" y="148" width="8" height="72" rx="4" fill="url(#leadGradT)" />
-        <rect x="116" y="148" width="8" height="72" rx="4" fill="url(#leadGradT)" />
-        <rect x="146" y="148" width="8" height="72" rx="4" fill="url(#leadGradT)" />
+        <rect x="86" y="140" width="8" height="80" rx="4" fill="url(#leadGrad)" />
+        <rect x="116" y="140" width="8" height="80" rx="4" fill="url(#leadGrad)" />
+        <rect x="146" y="140" width="8" height="80" rx="4" fill="url(#leadGrad)" />
 
-        {/* Cylinder back arc */}
-        <path d="M 60 90 C 60 42, 180 42, 180 90 Z" fill="url(#transTop)" />
+        {/* Back curve */}
+        <path d="M 60 90 C 60 40, 180 40, 180 90 Z" fill="url(#transTop)" />
 
-        {/* Main body cylinder */}
-        <path d="M 60 90 H 180 V 150 Q 180 160 170 160 H 70 Q 60 160 60 150 Z" fill="url(#transBody)" />
-
-        {/* Shine overlay */}
-        <path d="M 60 90 H 180 V 150 Q 180 160 170 160 H 70 Q 60 160 60 150 Z" fill="url(#transShine)" />
-
-        {/* Bottom ellipse */}
-        <ellipse cx="120" cy="160" rx="60" ry="8" fill="#0f172a" />
+        {/* Front face */}
+        <rect x="60" y="90" width="120" height="70" rx="8" fill="url(#transBody)" />
 
         {/* Text */}
-        <text x="120" y="132" textAnchor="middle" fontFamily={font} fontSize="20" fontWeight="700" fill="#e2e8f0" letterSpacing="1">{value || "2N3904"}</text>
+        <text x="120" y="130" textAnchor="middle" fontFamily={font} fontSize="22" fontWeight="700" fill="#cbd5e1" letterSpacing="1">{value || "2N3904"}</text>
       </svg>
       <span className="text-xl font-black text-slate-900 dark:text-white tracking-tight">{value || "Transistor"}</span>
     </div>
@@ -352,7 +342,7 @@ const CapacitorVisual = ({ value, unit, type, svgRef }: { value: string, unit: s
         <path d="M 60 70 L 60 170 A 60 15 0 0 0 180 170 L 180 70 Z" fill="url(#elecBody)" />
         <path d="M 60 70 L 60 170 A 60 15 0 0 0 85 174 L 85 74 A 60 15 0 0 1 60 70 Z" fill="url(#elecStripe)" />
         <ellipse cx="120" cy="70" rx="60" ry="15" fill="url(#elecTop)" />
-        <text x="120" y="130" textAnchor="middle" fontFamily={font} fontSize="24" fontWeight="700" fill="#f8fafc">{value}{unit}</text>
+        <text x="135" y="130" textAnchor="middle" fontFamily={font} fontSize="24" fontWeight="700" fill="#f8fafc">{value}{unit}</text>
       </>
     );
   } else if (type === 'Ceramic') {
@@ -450,7 +440,6 @@ export function AddComponent() {
   const [transistorUnit, setTransistorUnit] = useState("");
   const [capacitorUnit, setCapacitorUnit] = useState("µF");
   const [isBatchMode, setIsBatchMode] = useState(false);
-
   const generateRandomBarcode = () => {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
     let result = '';
@@ -573,10 +562,6 @@ export function AddComponent() {
   // Existing Files State (for Edit Mode)
   const [existingMainImage, setExistingMainImage] = useState<string | null>(null);
   const [existingDatasheet, setExistingDatasheet] = useState<string | null>(null);
-  const [existingAdditionalImages, setExistingAdditionalImages] = useState<string[]>([]);
-  const [existingAdditionalFiles, setExistingAdditionalFiles] = useState<string[]>([]);
-  const [removedExistingImages, setRemovedExistingImages] = useState<string[]>([]);
-  const [removedExistingFiles, setRemovedExistingFiles] = useState<string[]>([]);
 
   useEffect(() => {
     const fetchOptions = async () => {
@@ -628,7 +613,7 @@ export function AddComponent() {
     const fetchComponent = async () => {
       try {
         const component = await directus.request(readItem('components', Number(fetchId), {
-          fields: ['*', 'type.*', 'package.*', 'location.*', 'other_images.*', 'other_files.*'] as any
+          fields: ['*', 'type.*', 'package.*', 'location.*'] as any
         })) as unknown as Component;
 
         setFormData({
@@ -655,20 +640,6 @@ export function AddComponent() {
         // Reusing existing images is better UX.
         setExistingMainImage(component.main_image as string);
         setExistingDatasheet(component.datasheet as string);
-
-        // Load existing additional images and files (edit mode)
-        if (component.other_images && Array.isArray(component.other_images)) {
-          const imgIds = component.other_images
-            .filter((f: any) => f.directus_files_id)
-            .map((f: any) => typeof f.directus_files_id === 'object' ? f.directus_files_id.id : f.directus_files_id);
-          if (!isCloneMode) setExistingAdditionalImages(imgIds);
-        }
-        if (component.other_files && Array.isArray(component.other_files)) {
-          const fileIds = component.other_files
-            .filter((f: any) => f.directus_files_id)
-            .map((f: any) => typeof f.directus_files_id === 'object' ? f.directus_files_id.id : f.directus_files_id);
-          if (!isCloneMode) setExistingAdditionalFiles(fileIds);
-        }
 
       } catch (error) {
         console.error("Error fetching component:", error);
@@ -1017,17 +988,10 @@ export function AddComponent() {
     return `
       <svg xmlns="http://www.w3.org/2000/svg" width="240" height="240" viewBox="0 0 240 240">
         <defs>
-          <linearGradient id="resistorBodyGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-            <stop offset="0%" stop-color="#f5e6d3" />
-            <stop offset="20%" stop-color="#e6ccb2" />
-            <stop offset="50%" stop-color="#d2b48c" />
-            <stop offset="80%" stop-color="#b89b72" />
-            <stop offset="100%" stop-color="#a68a64" />
-          </linearGradient>
-          <linearGradient id="leadGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-            <stop offset="0%" stop-color="#d1d5db" />
-            <stop offset="50%" stop-color="#94a3b8" />
-            <stop offset="100%" stop-color="#64748b" />
+          <linearGradient id="resistorGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stop-color="#E6CCB2" />
+            <stop offset="50%" stop-color="#D2B48C" />
+            <stop offset="100%" stop-color="#B89B72" />
           </linearGradient>
           <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
             <feGaussianBlur in="SourceAlpha" stdDeviation="3" />
@@ -1041,42 +1005,27 @@ export function AddComponent() {
             </feMerge>
           </filter>
         </defs>
-        <rect width="100%" height="100%" fill="white"/>
-        
+        <rect width="100%" height="100%" fill="white" />
         <!-- Leads -->
-        <rect x="0" y="116" width="240" height="8" fill="url(#leadGrad)" rx="4" />
-        
-        <!-- Body Shadow -->
-        <rect x="20" y="95" width="200" height="50" rx="15" fill="black" opacity="0.1" transform="translate(0, 4)" />
-        
+        <line x1="0" y1="120" x2="240" y2="120" stroke="#A0A0A0" stroke-width="12" />
         <!-- Body -->
-        <rect x="20" y="95" width="200" height="50" rx="15" fill="url(#resistorBodyGrad)" stroke="#b89b72" stroke-width="1" />
-        
+        <rect x="20" y="95" width="200" height="50" rx="15" fill="url(#resistorGradient)" filter="url(#shadow)" />
         <!-- Bands -->
         ${bands.map((digit, i) => {
       const isMultiplier = i === (bandsCount === 4 ? 2 : 3);
       const color = isMultiplier ? MULTIPLIER_MAP[digit] : COLOR_MAP[digit];
-      const x = 45 + (i * 25);
-      return `
-            <rect x="${x}" y="95" width="10" height="50" fill="${color || "#E0E0E0"}" />
-            <rect x="${x}" y="95" width="10" height="50" fill="white" opacity="0.1" />
-          `;
+      const x = 40 + (i * 25);
+      return `<rect x="${x}" y="95" width="10" height="50" fill="${color || "#E0E0E0"}" />`;
     }).join('')}
-        
         <!-- Tolerance Band -->
         <rect x="170" y="95" width="10" height="50" fill="${toleranceColor}" />
-        <rect x="170" y="95" width="10" height="50" fill="white" opacity="0.1" />
-
         <!-- TempCo Band -->
         ${bandsCount === 6 ? `
           <rect x="190" y="95" width="10" height="50" fill="${tempCoColor}" />
-          <rect x="190" y="95" width="10" height="50" fill="white" opacity="0.1" />
         ` : ''}
-
-        <!-- Labels -->
-        <text x="120" y="55" text-anchor="middle" font-family="${font}" font-size="18" font-weight="900" fill="#94a3b8" style="letter-spacing: 0.3em">RESISTOR</text>
-        <text x="120" y="200" text-anchor="middle" font-family="${font}" font-size="44" font-weight="900" fill="#0f172a">${fullValue}</text>
-        <text x="120" y="225" text-anchor="middle" font-family="${font}" font-size="16" font-weight="700" fill="#64748b">±${tolerance} ${bandsCount === 6 ? `(${tempCo})` : ''}</text>
+        <text x="120" y="60" text-anchor="middle" font-family="${font}" font-size="20" font-weight="900" fill="#94a3b8" style="letter-spacing: 0.2em">RESISTOR</text>
+        <text x="120" y="200" text-anchor="middle" font-family="${font}" font-size="44" font-weight="900" fill="#0f172a">${fullValue || "0Ω"}</text>
+        <text x="120" y="225" text-anchor="middle" font-family="${font}" font-size="14" font-weight="700" fill="#64748b">±${tolerance} ${bandsCount === 6 ? `(${tempCo})` : ''}</text>
       </svg>
     `;
   };
@@ -1090,50 +1039,30 @@ export function AddComponent() {
     const toleranceColor = TOLERANCE_MAP[tolerance] || "#C0C0C0";
 
     return `
-      <svg xmlns="http://www.w3.org/2000/svg" width="800" height="800" viewBox="0 0 240 240">
+      <svg xmlns="http://www.w3.org/2000/svg" width="240" height="240" viewBox="0 0 240 240">
         <defs>
-          <linearGradient id="inductorBodyGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-            <stop offset="0%" stop-color="#bbf7bb" />
-            <stop offset="20%" stop-color="#90ee90" />
-            <stop offset="50%" stop-color="#70d070" />
-            <stop offset="80%" stop-color="#4ade80" />
-            <stop offset="100%" stop-color="#22c55e" />
-          </linearGradient>
-          <linearGradient id="leadGradInd" x1="0%" y1="0%" x2="0%" y2="100%">
-            <stop offset="0%" stop-color="#d1d5db" />
-            <stop offset="50%" stop-color="#94a3b8" />
-            <stop offset="100%" stop-color="#64748b" />
+          <linearGradient id="inductorGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stop-color="#B0F2B0" />
+            <stop offset="50%" stop-color="#90EE90" />
+            <stop offset="100%" stop-color="#70D070" />
           </linearGradient>
         </defs>
-        <rect width="100%" height="100%" fill="white"/>
-        
+        <rect width="100%" height="100%" fill="white" />
         <!-- Leads -->
-        <rect x="0" y="116" width="240" height="8" fill="url(#leadGradInd)" rx="4" />
-        
-        <!-- Body Shadow -->
-        <rect x="20" y="95" width="200" height="50" rx="25" fill="black" opacity="0.1" transform="translate(0, 4)" />
-        
+        <line x1="0" y1="120" x2="240" y2="120" stroke="#A0A0A0" stroke-width="12" />
         <!-- Body -->
-        <rect x="20" y="95" width="200" height="50" rx="25" fill="url(#inductorBodyGrad)" stroke="#16a34a" stroke-width="1" />
-        
+        <rect x="20" y="95" width="200" height="50" rx="25" fill="url(#inductorGradient)" />
         <!-- Bands -->
         ${bands.map((digit, i) => {
       const color = digit === -1 ? "#FFD700" : (i === 2 && bands.length === 3 ? MULTIPLIER_MAP[digit] : COLOR_MAP[digit]);
-      const x = 50 + (i * 35);
-      return `
-            <rect x="${x}" y="95" width="12" height="50" fill="${color || "#E0E0E0"}" />
-            <rect x="${x}" y="95" width="12" height="50" fill="white" opacity="0.1" />
-          `;
+      const x = 40 + (i * 40);
+      return `<rect x="${x}" y="95" width="15" height="50" fill="${color || "#E0E0E0"}" />`;
     }).join('')}
-        
         <!-- Tolerance Band -->
-        <rect x="170" y="95" width="12" height="50" fill="${toleranceColor}" />
-        <rect x="170" y="95" width="12" height="50" fill="white" opacity="0.1" />
-
-        <!-- Labels -->
-        <text x="120" y="55" text-anchor="middle" font-family="${font}" font-size="18" font-weight="900" fill="#94a3b8" style="letter-spacing: 0.3em">INDUCTOR</text>
-        <text x="120" y="200" text-anchor="middle" font-family="${font}" font-size="44" font-weight="900" fill="#0f172a">${fullValue}</text>
-        <text x="120" y="225" text-anchor="middle" font-family="${font}" font-size="16" font-weight="700" fill="#64748b">±${tolerance}</text>
+        <rect x="175" y="95" width="15" height="50" fill="${toleranceColor}" />
+        <text x="120" y="60" text-anchor="middle" font-family="${font}" font-size="20" font-weight="900" fill="#94a3b8" style="letter-spacing: 0.2em">INDUCTOR</text>
+        <text x="120" y="200" text-anchor="middle" font-family="${font}" font-size="44" font-weight="900" fill="#0f172a">${fullValue || "0µH"}</text>
+        <text x="120" y="225" text-anchor="middle" font-family="${font}" font-size="14" font-weight="700" fill="#64748b">±${tolerance}</text>
       </svg>
     `;
   };
@@ -1141,7 +1070,7 @@ export function AddComponent() {
   const getTransistorSvgString = (value: string) => {
     const font = "'Inter', system-ui, sans-serif";
     return `
-      <svg xmlns="http://www.w3.org/2000/svg" width="800" height="800" viewBox="0 0 240 240">
+      <svg xmlns="http://www.w3.org/2000/svg" width="240" height="240" viewBox="0 0 240 240">
         <defs>
           <linearGradient id="transBody" x1="0%" y1="0%" x2="0%" y2="100%">
             <stop offset="0%" stop-color="#334155" />
@@ -1156,33 +1085,23 @@ export function AddComponent() {
             <stop offset="50%" stop-color="#f8fafc" />
             <stop offset="100%" stop-color="#94a3b8" />
           </linearGradient>
-          <radialGradient id="transShine" cx="30%" cy="20%" r="60%">
-            <stop offset="0%" stop-color="#64748b" stop-opacity="0.6" />
-            <stop offset="100%" stop-color="#0f172a" stop-opacity="0" />
-          </radialGradient>
         </defs>
         <rect width="100%" height="100%" fill="white"/>
         <text x="120" y="30" text-anchor="middle" font-family="${font}" font-size="14" font-weight="900" fill="#94a3b8" style="letter-spacing: 0.3em">TRANSISTOR</text>
         
         <!-- Leads -->
-        <rect x="86" y="148" width="8" height="72" rx="4" fill="url(#leadGrad)" />
-        <rect x="116" y="148" width="8" height="72" rx="4" fill="url(#leadGrad)" />
-        <rect x="146" y="148" width="8" height="72" rx="4" fill="url(#leadGrad)" />
+        <rect x="86" y="140" width="8" height="80" rx="4" fill="url(#leadGrad)" />
+        <rect x="116" y="140" width="8" height="80" rx="4" fill="url(#leadGrad)" />
+        <rect x="146" y="140" width="8" height="80" rx="4" fill="url(#leadGrad)" />
         
-        <!-- Cylinder back arc -->
-        <path d="M 60 90 C 60 42, 180 42, 180 90 Z" fill="url(#transTop)" />
+        <!-- Back curve -->
+        <path d="M 60 90 C 60 40, 180 40, 180 90 Z" fill="url(#transTop)" />
         
-        <!-- Main body cylinder -->
-        <path d="M 60 90 H 180 V 150 Q 180 160 170 160 H 70 Q 60 160 60 150 Z" fill="url(#transBody)" />
-        
-        <!-- Shine overlay -->
-        <path d="M 60 90 H 180 V 150 Q 180 160 170 160 H 70 Q 60 160 60 150 Z" fill="url(#transShine)" />
-        
-        <!-- Bottom ellipse -->
-        <ellipse cx="120" cy="160" rx="60" ry="8" fill="#0f172a" />
+        <!-- Front face -->
+        <rect x="60" y="90" width="120" height="70" rx="8" fill="url(#transBody)" />
         
         <!-- Text -->
-        <text x="120" y="132" text-anchor="middle" font-family="${font}" font-size="20" font-weight="700" fill="#e2e8f0" letter-spacing="1">${value || "2N3904"}</text>
+        <text x="120" y="130" text-anchor="middle" font-family="${font}" font-size="22" font-weight="700" fill="#cbd5e1" letter-spacing="1">${value || "2N3904"}</text>
       </svg>
     `;
   };
@@ -1222,7 +1141,7 @@ export function AddComponent() {
         <path d="M 60 70 L 60 170 A 60 15 0 0 0 180 170 L 180 70 Z" fill="url(#elecBody)" />
         <path d="M 60 70 L 60 170 A 60 15 0 0 0 85 174 L 85 74 A 60 15 0 0 1 60 70 Z" fill="url(#elecStripe)" />
         <ellipse cx="120" cy="70" rx="60" ry="15" fill="url(#elecTop)" />
-        <text x="120" y="130" text-anchor="middle" font-family="${font}" font-size="24" font-weight="700" fill="#f8fafc">${value}${unit}</text>
+        <text x="135" y="130" text-anchor="middle" font-family="${font}" font-size="24" font-weight="700" fill="#f8fafc">${value}${unit}</text>
       `;
     } else if (type === 'Ceramic') {
       capContent = `
@@ -1267,7 +1186,7 @@ export function AddComponent() {
     }
 
     return `
-      <svg xmlns="http://www.w3.org/2000/svg" width="800" height="800" viewBox="0 0 240 240">
+      <svg xmlns="http://www.w3.org/2000/svg" width="240" height="240" viewBox="0 0 240 240">
         <rect width="100%" height="100%" fill="white"/>
         <text x="120" y="30" text-anchor="middle" font-family="${font}" font-size="14" font-weight="900" fill="#94a3b8" style="letter-spacing: 0.3em">CAPACITOR</text>
         ${capContent}
@@ -1417,10 +1336,7 @@ export function AddComponent() {
           packet_reference: formData.packetReference || null,
           package: formData.pkg && formData.pkg !== "0" ? Number(formData.pkg) : null,
           type: formData.category && formData.category !== "0" ? Number(formData.category) : null,
-          // Global barcode (right panel) overrides per-item barcodes when set in batch mode
-          barcode: isBatchMode
-            ? (barcodes.length > 0 ? barcodes.join(';') : ((item as any).barcode || null))
-            : (barcodes.length > 0 ? barcodes.join(';') : null),
+          barcode: isBatchMode ? ((item as any).barcode || null) : (barcodes.length > 0 ? barcodes.join(';') : null),
         };
 
         if (mainImageId) {
@@ -1561,13 +1477,7 @@ export function AddComponent() {
                     </button>
                     <button
                       type="button"
-                      onClick={() => {
-                        if (!isResistor && !isInductor && !isTransistor && !isCapacitor) {
-                          toast.error("Veuillez d'abord sélectionner un type de composant (Résistance, Inductance, Transistor ou Condensateur) avant d'activer le mode batch.");
-                          return;
-                        }
-                        setIsBatchMode(!isBatchMode);
-                      }}
+                      onClick={() => setIsBatchMode(!isBatchMode)}
                       className={`flex items-center justify-center gap-2 p-3 rounded-lg border transition-all ${isBatchMode ? 'bg-orange-500 text-white border-orange-500 shadow-md' : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-800'}`}
                     >
                       <Layers className="w-4 h-4" />
@@ -1737,22 +1647,20 @@ export function AddComponent() {
                           <div className="flex justify-between items-center">
                             <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Batch Items</label>
                             <div className="flex gap-3">
-                              {!barcodes.length && (
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    const newItems = batchItems.map(item => ({
-                                      ...item,
-                                      barcode: item.barcode || generateRandomBarcode()
-                                    }));
-                                    setBatchItems(newItems);
-                                    toast.success("Generated barcodes for all items");
-                                  }}
-                                  className="flex items-center gap-1 text-xs font-bold text-slate-500 hover:text-primary transition-colors"
-                                >
-                                  <RefreshCw className="w-3 h-3" /> Generate All Barcodes
-                                </button>
-                              )}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const newItems = batchItems.map(item => ({
+                                    ...item,
+                                    barcode: item.barcode || generateRandomBarcode()
+                                  }));
+                                  setBatchItems(newItems);
+                                  toast.success("Generated barcodes for all items");
+                                }}
+                                className="flex items-center gap-1 text-xs font-bold text-slate-500 hover:text-primary transition-colors"
+                              >
+                                <RefreshCw className="w-3 h-3" /> Generate All Barcodes
+                              </button>
                               <button
                                 type="button"
                                 onClick={() => setBatchItems([...batchItems, { value: "", quantity: 1, unit: isResistor ? resistorUnit : (isInductor ? inductorUnit : (isTransistor ? "" : (isCapacitor ? capacitorUnit : ""))) }])}
@@ -1829,31 +1737,27 @@ export function AddComponent() {
                                   <label className="text-[10px] uppercase font-bold text-slate-400">Barcode</label>
                                   <div className="relative">
                                     <input
-                                      value={barcodes.length > 0 ? barcodes.join(';') : (item.barcode || "")}
+                                      value={item.barcode || ""}
                                       onChange={(e) => {
-                                        if (barcodes.length > 0) return;
                                         const newItems = [...batchItems];
                                         newItems[index].barcode = e.target.value;
                                         setBatchItems(newItems);
                                       }}
-                                      readOnly={barcodes.length > 0}
-                                      placeholder={barcodes.length > 0 ? "Using global..." : "SKU..."}
-                                      className={`form-input w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white h-10 pl-3 pr-8 text-xs font-mono ${focusClasses} ${barcodes.length > 0 ? 'opacity-50 cursor-not-allowed bg-slate-50 dark:bg-slate-900' : ''}`}
+                                      placeholder="SKU..."
+                                      className={`form-input w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white h-10 pl-3 pr-8 text-xs font-mono ${focusClasses}`}
                                     />
-                                    {!barcodes.length && (
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          const newItems = [...batchItems];
-                                          newItems[index].barcode = generateRandomBarcode();
-                                          setBatchItems(newItems);
-                                        }}
-                                        className="absolute right-1 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-primary transition-colors"
-                                        title="Generate Barcode"
-                                      >
-                                        <RefreshCw className="w-3 h-3" />
-                                      </button>
-                                    )}
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const newItems = [...batchItems];
+                                        newItems[index].barcode = generateRandomBarcode();
+                                        setBatchItems(newItems);
+                                      }}
+                                      className="absolute right-1 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-primary transition-colors"
+                                      title="Generate Barcode"
+                                    >
+                                      <RefreshCw className="w-3 h-3" />
+                                    </button>
                                   </div>
                                 </div>
                                 <button
@@ -2194,40 +2098,6 @@ export function AddComponent() {
                     </div>
                     <input type="file" hidden multiple ref={additionalImagesRef} accept="image/*" onChange={(e) => handleMultipleFiles(e, setAdditionalImages)} />
 
-                    {/* Existing images from Directus (edit mode) */}
-                    {existingAdditionalImages.length > 0 && (
-                      <div className="flex flex-col gap-2 mt-1">
-                        <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Existing ({existingAdditionalImages.length})</p>
-                        <div className="flex flex-col gap-2 max-h-40 overflow-y-auto pr-1">
-                          {existingAdditionalImages.map((fileId, idx) => (
-                            <div key={fileId} className={`flex items-center justify-between bg-slate-100 dark:bg-slate-800 p-2 rounded-lg border border-slate-200 dark:border-slate-700 ${removedExistingImages.includes(fileId) ? 'opacity-40 line-through' : ''}`}>
-                              <div className="flex items-center gap-2 overflow-hidden">
-                                <img
-                                  src={getFileUrl(fileId)}
-                                  alt={`Existing ${idx}`}
-                                  className="w-8 h-8 object-cover rounded shrink-0 border border-slate-200 dark:border-slate-700"
-                                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                                />
-                                <span className="text-xs truncate text-slate-500 font-mono">{fileId.substring(0, 12)}...</span>
-                              </div>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setRemovedExistingImages(prev =>
-                                    prev.includes(fileId) ? prev.filter(x => x !== fileId) : [...prev, fileId]
-                                  );
-                                }}
-                                className={`p-1 transition-colors ${removedExistingImages.includes(fileId) ? 'text-primary' : 'text-slate-400 hover:text-red-500'}`}
-                                title={removedExistingImages.includes(fileId) ? 'Restore' : 'Remove'}
-                              >
-                                {removedExistingImages.includes(fileId) ? <RefreshCw className="w-3 h-3" /> : <X className="w-3 h-3" />}
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
                     {additionalImages.length > 0 && (
                       <div className="flex flex-col gap-2 mt-2 max-h-40 overflow-y-auto pr-1">
                         {additionalImages.map((file, idx) => (
@@ -2263,35 +2133,6 @@ export function AddComponent() {
                       </div>
                     </div>
                     <input type="file" hidden multiple ref={additionalFilesRef} onChange={(e) => handleMultipleFiles(e, setAdditionalFiles)} />
-
-                    {/* Existing files from Directus (edit mode) */}
-                    {existingAdditionalFiles.length > 0 && (
-                      <div className="flex flex-col gap-2 mt-1">
-                        <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Existing ({existingAdditionalFiles.length})</p>
-                        <div className="flex flex-col gap-2 max-h-40 overflow-y-auto pr-1">
-                          {existingAdditionalFiles.map((fileId, idx) => (
-                            <div key={fileId} className={`flex items-center justify-between bg-slate-100 dark:bg-slate-800 p-2 rounded-lg border border-slate-200 dark:border-slate-700 ${removedExistingFiles.includes(fileId) ? 'opacity-40 line-through' : ''}`}>
-                              <div className="flex items-center gap-2 overflow-hidden">
-                                <FileText className="w-4 h-4 text-slate-400 shrink-0" />
-                                <span className="text-xs truncate text-slate-500 font-mono">{fileId.substring(0, 12)}...</span>
-                              </div>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setRemovedExistingFiles(prev =>
-                                    prev.includes(fileId) ? prev.filter(x => x !== fileId) : [...prev, fileId]
-                                  );
-                                }}
-                                className={`p-1 transition-colors ${removedExistingFiles.includes(fileId) ? 'text-primary' : 'text-slate-400 hover:text-red-500'}`}
-                                title={removedExistingFiles.includes(fileId) ? 'Restore' : 'Remove'}
-                              >
-                                {removedExistingFiles.includes(fileId) ? <RefreshCw className="w-3 h-3" /> : <X className="w-3 h-3" />}
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
 
                     {additionalFiles.length > 0 && (
                       <div className="flex flex-col gap-2 mt-2 max-h-40 overflow-y-auto pr-1">
@@ -2386,20 +2227,7 @@ export function AddComponent() {
                     />
                   </div>
                   <div className="pt-4 border-t border-slate-200 dark:border-slate-800">
-                    <div className="flex items-center justify-between">
-                      <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Barcodes / SKUs</label>
-                      {isBatchMode && (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 rounded-full text-[10px] font-bold uppercase tracking-wider">
-                          <Zap className="w-2.5 h-2.5" />
-                          Override global batch
-                        </span>
-                      )}
-                    </div>
-                    {isBatchMode && barcodes.length > 0 && (
-                      <p className="text-[10px] text-orange-600 dark:text-orange-400 mt-1 font-medium">
-                        ⚠ Ces codes-barres seront appliqués à <strong>tous les composants</strong> du batch, ignorant les codes unitaires.
-                      </p>
-                    )}
+                    <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Barcodes / SKUs</label>
                     <div className="mt-2 flex flex-col gap-4">
                       <div className="flex flex-wrap gap-2 p-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 focus-within:border-primary focus-within:ring-4 focus-within:ring-primary/20 transition-all">
                         {barcodes.map((code) => (
@@ -2468,10 +2296,8 @@ export function AddComponent() {
                                   </div>
                                 </div>
 
-                                <div className="w-full flex flex-col items-center justify-center bg-white dark:bg-white rounded-lg p-3 border border-slate-100 dark:border-slate-200 overflow-hidden">
-                                  <div className="w-full flex justify-center responsive-barcode">
-                                    <BarcodeGenerator value={code} height={40} displayValue={false} background="transparent" width={1.5} margin={0} />
-                                  </div>
+                                <div className="w-full flex flex-col items-center justify-center bg-white dark:bg-white rounded-lg p-3 border border-slate-100 dark:border-slate-200">
+                                  <BarcodeGenerator value={code} height={40} displayValue={false} background="transparent" width={1.5} margin={0} />
                                   <div className="text-center text-[10px] font-mono mt-2 tracking-[0.2em] font-bold text-slate-900">{code}</div>
                                 </div>
                               </div>

@@ -35,14 +35,6 @@ Before you begin, ensure you have met the following requirements:
 3. Configure Environment Variables:
    Create a `.env` file in the root directory and add the following variables:
    ```env
-   # Configuration des ports
-   HTTP_PORT=3000
-   HTTPS_PORT=3300
-
-   # Chemins vers tes certificats SSL (chemins absolus ou relatifs au répertoire du projet)
-   SSL_KEY_PATH=./certs/key.pem
-   SSL_CERT_PATH=./certs/cert.pem
-
    # GEMINI_API_KEY: Required for Gemini AI API calls.
    # AI Studio automatically injects this at runtime from user secrets.
    # Users configure this via the Secrets panel in the AI Studio UI.
@@ -52,7 +44,7 @@ Before you begin, ensure you have met the following requirements:
    SERPAPI_API_KEY=""
 
    VITE_DIRECTUS_URL="http://[IP_ADDRESS]/"
-
+   PORT=3000
    ```
 
 ## Running the Application
@@ -63,7 +55,7 @@ To start the development server:
 npm run dev
 ```
 
-The application will be available at `http://localhost:3000`.
+The application will be available at `http://localhost:3000` (or the configured `PORT`).
 
 ## Building for Production
 
@@ -93,5 +85,18 @@ git commit -m "fix: resolve print preview overflow issue on batch barcodes page"
 
 This project is licensed under the MIT License.
 
-CREATE A PROXY FOR HTTPS ON TAILSCALE
-`sudo tailscale serve --bg --https=[HTTPS_PORT] http://[IP_ADDRESS]:[HTTP_PORT]`
+## HTTPS Proxy with Tailscale
+
+The production server is configured to support reverse proxies (using `trust proxy`). You can easily set up HTTPS using Tailscale:
+
+1.  **Direct serving**:
+    ```bash
+    tailscale serve https:443 / http://localhost:3000
+    ```
+
+2.  **Using Tailscale Funnel** (for external access):
+    ```bash
+    tailscale funnel 443 on
+    ```
+
+Note: Ensure the source port matches your configured `PORT` environment variable.

@@ -20,8 +20,8 @@ const ALL_FORMATS: BarcodeFormat[] = [
 ];
 
 function statusLabel(s: string): string {
-  return { disconnected: 'Déconnecté', connecting: 'Connexion…', connected: 'Connecté',
-           printing: 'Impression…', error: 'Erreur' }[s] ?? s;
+  return { disconnected: 'Disconnected', connecting: 'Connecting…', connected: 'Connected',
+           printing: 'Printing…', error: 'Error' }[s] ?? s;
 }
 
 function useLocalStorageState<T>(key: string, defaultValue: T): [T, React.Dispatch<React.SetStateAction<T>>] {
@@ -114,7 +114,7 @@ export function FicheroBatchMode({ barcodes, headerComponent, generateControls }
   const previewValue = barcodes.length > 0 ? barcodes[0] : 'EMPTY';
 
   const validation = useMemo(() => {
-    if (!previewValue || previewValue === 'EMPTY') return { valid: false, error: 'Pas de code généré' };
+    if (!previewValue || previewValue === 'EMPTY') return { valid: false, error: 'No code generated' };
     return validate(previewValue, format);
   }, [previewValue, format]);
 
@@ -186,10 +186,10 @@ export function FicheroBatchMode({ barcodes, headerComponent, generateControls }
         await print(currentBitmap, { density, copies, paperType });
         setPrintProgress(i + 1);
       }
-      setPrintLog(l => [{ ts, msg: `${barcodes.length} étiquettes envoyées`, ok: true }, ...l.slice(0,9)]);
+      setPrintLog(l => [{ ts, msg: `${barcodes.length} labels sent`, ok: true }, ...l.slice(0, 9)]);
       setTimeout(() => setPrintProgress(0), 1000); // Reset after completing
     } catch (e) {
-      setPrintLog(l => [{ ts, msg: `Erreur: ${e instanceof Error ? e.message : String(e)}`, ok: false }, ...l.slice(0,9)]);
+      setPrintLog(l => [{ ts, msg: `Error: ${e instanceof Error ? e.message : String(e)}`, ok: false }, ...l.slice(0, 9)]);
       setPrintProgress(0);
     }
   }, [options, barcodes, print, isConnected, density, copies, paperType, format]);
@@ -275,7 +275,7 @@ export function FicheroBatchMode({ barcodes, headerComponent, generateControls }
                 <BarcodeIcon className="w-4 h-4 text-primary" /> Format
               </h3>
               <div className="space-y-2">
-                <label htmlFor="format-select" className={labelClass}>Symbologie</label>
+                <label htmlFor="format-select" className={labelClass}>Symbology</label>
                 <select
                   id="format-select"
                   value={format}
@@ -292,10 +292,10 @@ export function FicheroBatchMode({ barcodes, headerComponent, generateControls }
             {/* Label dimensions */}
             <div className="space-y-4 pt-6 border-t border-slate-200 dark:border-slate-800">
               <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center gap-2">
-                <Ruler className="w-4 h-4 text-primary" /> Étiquette
+                <Ruler className="w-4 h-4 text-primary" /> Label
               </h3>
               <div className="space-y-2">
-                <label htmlFor="label-preset" className={labelClass}>Format Standard</label>
+                <label htmlFor="label-preset" className={labelClass}>Standard Format</label>
                 <select
                   id="label-preset"
                   value={[30, 40, 50].includes(labelH) ? `14x${labelH}` : 'custom'}
@@ -308,13 +308,13 @@ export function FicheroBatchMode({ barcodes, headerComponent, generateControls }
                   <option value="14x30">14 × 30 mm</option>
                   <option value="14x40">14 × 40 mm</option>
                   <option value="14x50">14 × 50 mm</option>
-                  <option value="custom">Personnalisé…</option>
+                  <option value="custom">Custom…</option>
                 </select>
               </div>
 
               <div className="space-y-2">
                 <label htmlFor="label-height" className={`${labelClass} flex justify-between`}>
-                  <span>Hauteur de papier</span>
+                  <span>Paper Height</span>
                   <span className="font-normal text-slate-500">{labelH} mm</span>
                 </label>
                 <input
@@ -328,13 +328,13 @@ export function FicheroBatchMode({ barcodes, headerComponent, generateControls }
               </div>
 
               <div className="space-y-2">
-                <label className={labelClass}>Couleur du papier</label>
+                <label className={labelClass}>Paper Color</label>
                 <div style={{ display: 'flex', gap: '8px', marginTop: '6px' }}>
                   {[
-                    { name: 'Blanc', hex: '#ffffff' },
-                    { name: 'Jaune', hex: '#fef08a' },
-                    { name: 'Rose',  hex: '#fbcfe8' },
-                    { name: 'Bleu',  hex: '#bfdbfe' },
+                    { name: 'White', hex: '#ffffff' },
+                    { name: 'Yellow', hex: '#fef08a' },
+                    { name: 'Pink', hex: '#fbcfe8' },
+                    { name: 'Blue', hex: '#bfdbfe' },
                   ].map(c => (
                     <button
                       key={c.name}
@@ -369,14 +369,14 @@ export function FicheroBatchMode({ barcodes, headerComponent, generateControls }
                     >
                       <option value={0}>0° (vertical)</option>
                       <option value={90}>90° (horizontal)</option>
-                      <option value={180}>180° (inversé)</option>
-                      <option value={270}>270° (inversé)</option>
+                      <option value={180}>180° (inverted)</option>
+                      <option value={270}>270° (inverted)</option>
                     </select>
                   </div>
 
                   <div className="space-y-2">
                     <label htmlFor="bar-height" className={`${labelClass} flex justify-between`}>
-                      <span>Hauteur des barres</span>
+                      <span>Bar Height</span>
                       <span className="font-normal text-slate-500">{Math.round(barHeight * 100)}%</span>
                     </label>
                     <input
@@ -393,7 +393,7 @@ export function FicheroBatchMode({ barcodes, headerComponent, generateControls }
 
               <div className="space-y-2">
                 <label htmlFor="quiet-zone" className={`${labelClass} flex justify-between`}>
-                  <span>Zone de silence</span>
+                  <span>Quiet Zone</span>
                   <span className="font-normal text-slate-500">{Math.round(quietZone * 100)}%</span>
                 </label>
                 <input
@@ -436,42 +436,42 @@ export function FicheroBatchMode({ barcodes, headerComponent, generateControls }
               </div>
 
               <div className="flex items-center gap-3 pt-2">
-                <input 
+                <input
                   type="checkbox" id="showOffsetPreview" checked={showOffsetPreview} onChange={e => setShowOffsetPreview(e.target.checked)}
                   className="w-4 h-4 text-primary bg-slate-50 border-slate-300 rounded focus:ring-primary dark:bg-slate-900 dark:border-slate-700 cursor-pointer"
                 />
-                <label htmlFor="showOffsetPreview" className={`${labelClass} cursor-pointer select-none font-medium`}>Aperçu du décalage</label>
+                <label htmlFor="showOffsetPreview" className={`${labelClass} cursor-pointer select-none font-medium`}>Offset Preview</label>
               </div>
 
               <div className="flex items-center gap-3 pt-1">
-                <input 
+                <input
                   type="checkbox" id="inverted" checked={inverted} onChange={e => setInverted(e.target.checked)}
                   className="w-4 h-4 text-primary bg-slate-50 border-slate-300 rounded focus:ring-primary dark:bg-slate-900 dark:border-slate-700 cursor-pointer"
                 />
-                <label htmlFor="inverted" className={`${labelClass} cursor-pointer select-none font-medium`}>Couleurs inversées</label>
+                <label htmlFor="inverted" className={`${labelClass} cursor-pointer select-none font-medium`}>Inverted Colors</label>
               </div>
 
               {!is2DFormat(format) && (
                 <>
                   <div className="flex items-center gap-3 pt-1 border-t border-slate-100 dark:border-slate-800 mt-2">
-                    <input 
+                    <input
                       type="checkbox" id="showText" checked={showText} onChange={e => setShowText(e.target.checked)}
                       className="w-4 h-4 text-primary bg-slate-50 border-slate-300 rounded focus:ring-primary dark:bg-slate-900 dark:border-slate-700 cursor-pointer"
                     />
-                    <label htmlFor="showText" className={`${labelClass} cursor-pointer select-none font-medium`}>Texte lisible</label>
+                    <label htmlFor="showText" className={`${labelClass} cursor-pointer select-none font-medium`}>Readable Text</label>
                   </div>
                   {showText && (
                     <div className="flex gap-3">
                       <div className="space-y-2 w-1/2">
                         <label htmlFor="text-pos" className={labelClass}>Position</label>
                         <select id="text-pos" value={textPos} onChange={e => setTextPos(e.target.value as TextPosition)} className={inputClass} style={{ padding: '6px 10px' }}>
-                          <option value="top">Haut</option>
-                          <option value="bottom">Bas</option>
+                          <option value="top">Top</option>
+                          <option value="bottom">Bottom</option>
                         </select>
                       </div>
                       <div className="space-y-2 w-1/2">
                         <label htmlFor="font-size" className={`${labelClass} flex justify-between`}>
-                          <span>Taille</span>
+                          <span>Size</span>
                           <span className="font-normal text-slate-500">{fontSize}</span>
                         </label>
                         <input
@@ -500,7 +500,7 @@ export function FicheroBatchMode({ barcodes, headerComponent, generateControls }
             <div className="flex items-center justify-between mb-8 w-full">
               <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200 flex items-center gap-2">
                 <Eye className="w-5 h-5 text-primary" />
-                Aperçu ({barcodes.length} étiquette{barcodes.length > 1 ? 's' : ''})
+                Preview ({barcodes.length} label{barcodes.length > 1 ? 's' : ''})
               </h3>
               <span className="bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-3 py-1.5 rounded-md border border-slate-200 dark:border-slate-700 text-xs font-mono shadow-sm">
                 14 × {labelH} mm
@@ -530,7 +530,7 @@ export function FicheroBatchMode({ barcodes, headerComponent, generateControls }
 
             {scanInfo && !scanInfo.ok && (
               <div className="mt-4 bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400 border border-orange-200 dark:border-orange-800/30 px-4 py-3 rounded-lg text-sm max-w-sm text-center shadow-sm">
-                ⚠ Module trop petit ({scanInfo.minPx.toFixed(1)}px). Augmentez la largeur des barres.
+                ⚠ Module too small ({scanInfo.minPx.toFixed(1)}px). Increase bar width.
               </div>
             )}
           </div>
@@ -542,7 +542,7 @@ export function FicheroBatchMode({ barcodes, headerComponent, generateControls }
           <div className="mb-6 border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl shadow-sm">
             <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-4 flex items-center justify-between">
               <span className="flex items-center gap-2">
-                <PrinterIcon className="w-4 h-4 text-primary" /> Imprimante
+                <PrinterIcon className="w-4 h-4 text-primary" /> Printer
               </span>
               <span className="flex items-center gap-1.5">
                 <span className={`w-2 h-2 rounded-full ${status === 'connected' ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]' : status === 'error' ? 'bg-red-500' : 'bg-slate-400'}`} />
@@ -563,14 +563,14 @@ export function FicheroBatchMode({ barcodes, headerComponent, generateControls }
                 disabled={status === 'connecting'}
               >
                 {status === 'connecting' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Bluetooth className="w-4 h-4" />}
-                {status === 'connecting' ? 'Bluetooth...' : 'Connecter'}
+                {status === 'connecting' ? 'Bluetooth...' : 'Connect'}
               </button>
             ) : (
               <div className="space-y-3">
                 {info && (
                   <div className="grid grid-cols-2 gap-2 mb-3">
                     <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-2 rounded-lg flex items-center justify-between shadow-sm">
-                      <span className="text-[10px] text-slate-500 font-bold uppercase">Batterie</span>
+                      <span className="text-[10px] text-slate-500 font-bold uppercase">Battery</span>
                       <div className="flex items-center gap-1.5">
                          <span className="text-xs font-semibold text-slate-700 dark:text-slate-200">{info.battery ?? '?'}%</span>
                          <Battery className={`w-3.5 h-3.5 ${info.battery !== undefined && info.battery < 20 ? 'text-red-500' : 'text-slate-400 dark:text-slate-500'}`} />
@@ -589,32 +589,32 @@ export function FicheroBatchMode({ barcodes, headerComponent, generateControls }
                   className="w-full bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-sm font-semibold py-2 px-4 rounded-lg transition-all"
                   onClick={disconnect}
                 >
-                  Déconnecter Bluetooth
+                  Disconnect Bluetooth
                 </button>
               </div>
             )}
           </div>
 
           <div className="mb-6 space-y-4">
-            <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider">Paramètres</h3>
+            <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider">Settings</h3>
 
             <div className="space-y-2">
-              <label htmlFor="density-sel" className={labelClass}>Densité</label>
+              <label htmlFor="density-sel" className={labelClass}>Density</label>
               <select
                 id="density-sel"
                 value={density}
                 onChange={e => setDensity(Number(e.target.value) as Density)}
                 className={inputClass}
               >
-                <option value={0}>0 — Légère</option>
-                <option value={1}>1 — Normale</option>
-                <option value={2}>2 — Épaisse ★</option>
-                <option value={3}>3 — Ultra-épaisse</option>
+                <option value={0}>0 — Light</option>
+                <option value={1}>1 — Normal</option>
+                <option value={2}>2 — Thick ★</option>
+                <option value={3}>3 — Ultra-thick</option>
               </select>
             </div>
 
             <div className="space-y-2">
-              <label htmlFor="copies-inp" className={labelClass}>Copies par code</label>
+              <label htmlFor="copies-inp" className={labelClass}>Copies per code</label>
               <input
                 id="copies-inp"
                 type="number"
@@ -626,15 +626,15 @@ export function FicheroBatchMode({ barcodes, headerComponent, generateControls }
             </div>
 
             <div className="space-y-2">
-              <label htmlFor="paper-type" className={labelClass}>Type de papier</label>
+              <label htmlFor="paper-type" className={labelClass}>Paper Type</label>
               <select
                 id="paper-type"
                 value={paperType}
                 onChange={e => setPaperType(e.target.value as PaperType)}
                 className={inputClass}
               >
-                <option value="gap">Gap (séparées) ★</option>
-                <option value="continuous">Continu</option>
+                <option value="gap">Gap (separated) ★</option>
+                <option value="continuous">Continuous</option>
               </select>
             </div>
           </div>
@@ -654,18 +654,18 @@ export function FicheroBatchMode({ barcodes, headerComponent, generateControls }
               <span className="relative z-10 flex items-center justify-center gap-2 w-full">
                 {status === 'printing' ? (
                   <>
-                    <Loader2 className="w-5 h-5 animate-spin" /> Impression {barcodes.length > 1 ? `(${printProgress}/${barcodes.length})` : 'en cours...'}
+                    <Loader2 className="w-5 h-5 animate-spin" /> Printing {barcodes.length > 1 ? `(${printProgress}/${barcodes.length})` : 'in progress...'}
                   </>
                 ) : (
                   <>
-                    <PrinterIcon className="w-5 h-5" /> Imprimer ({barcodes.length})
+                    <PrinterIcon className="w-5 h-5" /> Print ({barcodes.length})
                   </>
                 )}
               </span>
             </button>
             {!isConnected && (
               <p className="text-xs text-center text-slate-500 mt-3 font-medium">
-                Connectez l'imprimante pour lancer la tâche
+                Connect the printer to start the task
               </p>
             )}
           </div>
