@@ -36,6 +36,7 @@ import { readItem, readItems, deleteItem, updateItem } from "@directus/sdk";
 import MDEditor from '@uiw/react-md-editor';
 import BarcodeGenerator from "react-barcode";
 import { toast } from "sonner";
+import { FicheroBatchMode } from "../components/FicheroBatchMode";
 
 export function ComponentDetails() {
   const { id } = useParams<{ id: string }>();
@@ -49,6 +50,8 @@ export function ComponentDetails() {
   const [isUpdating, setIsUpdating] = useState(false);
   const [criticalThreshold, setCriticalThreshold] = useState(10);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
+  const [printModalBarcode, setPrintModalBarcode] = useState<string | null>(null);
+  const [printMode, setPrintMode] = useState<'pdf' | 'fichero'>('pdf');
   const viewerRef = useRef<HTMLDivElement>(null);
   const viewerInstance = useRef<Viewer | null>(null);
 
@@ -271,23 +274,27 @@ export function ComponentDetails() {
       <style>
         {`
           @media print {
-            body * {
-              visibility: hidden;
+            body * { visibility: hidden !important; }
+            #modal-print-container, #modal-print-container * {
+              visibility: visible !important;
             }
-            #single-barcode-print, #single-barcode-print * {
-              visibility: visible;
-            }
-            #single-barcode-print {
-              position: absolute;
-              left: 0;
-              top: 0;
-              width: 100%;
-              background: white !important;
+            #modal-print-container {
+              position: fixed;
+              left: 50%;
+              top: 50%;
+              transform: translate(-50%, -50%);
+              width: 100vw;
+              height: 100vh;
+              display: flex;
+              align-items: center;
+              justify-content: center;
               padding: 0 !important;
               margin: 0 !important;
-              box-shadow: none !important;
+              background: white !important;
               border: none !important;
+              box-shadow: none !important;
             }
+            @page { size: A4; margin: 0; }
           }
         `}
       </style>
@@ -565,19 +572,7 @@ export function ComponentDetails() {
                             </div>
 
                             <button 
-                              onClick={() => {
-                                const style = document.createElement('style');
-                                style.innerHTML = `
-                                  @media print {
-                                    body * { visibility: hidden; }
-                                    #barcode-print-${idx}, #barcode-print-${idx} * { visibility: visible; }
-                                    #barcode-print-${idx} { position: absolute; left: 0; top: 0; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
-                                  }
-                                `;
-                                document.head.appendChild(style);
-                                window.print();
-                                document.head.removeChild(style);
-                              }} 
+                              onClick={() => setPrintModalBarcode(code)} 
                               className="absolute top-2 right-2 p-2 bg-slate-50 dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-400 hover:text-primary hover:border-primary transition-all opacity-0 group-hover:opacity-100 shadow-sm"
                               title="Print Barcode"
                             >
@@ -590,25 +585,6 @@ export function ComponentDetails() {
                       <p className="text-sm font-semibold font-mono text-slate-400">N/A</p>
                     )}
                   </div>
-                  
-                  {/* Hidden print containers for each barcode */}
-                  {component.barcode && component.barcode.split(';').filter(b => b.trim()).map((code, idx) => (
-                    <div key={idx} id={`barcode-print-${idx}`} className="hidden print:flex border border-slate-300 dark:border-slate-700 p-4 rounded-md flex-col justify-center h-32 relative bg-white dark:bg-slate-900 w-[300px]">
-                      <div className="flex justify-between items-start mb-2 w-full">
-                        <div className="flex items-center gap-1.5">
-                          <Zap className="w-4 h-4 text-primary" />
-                          <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">ElectroStock</span>
-                        </div>
-                        <span className="text-[9px] font-mono text-slate-500">v2.4.0</span>
-                      </div>
-                      <div className="flex flex-col items-center justify-center w-full">
-                        <div className="h-10 w-full flex items-center justify-center overflow-hidden bg-white rounded p-1">
-                          <BarcodeGenerator value={code} height={30} displayValue={false} background="transparent" width={1.5} margin={0} />
-                        </div>
-                        <div className="text-center text-[10px] font-mono mt-1 tracking-[0.2em] font-bold">{code}</div>
-                      </div>
-                    </div>
-                  ))}
                 </div>
               </div>
             </div>
@@ -790,6 +766,56 @@ export function ComponentDetails() {
               {isUpdating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
               Confirm Update
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Unified Print Selection Modal */}
+      {printModalBarcode && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm px-4 no-print">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-[90vw] h-[90vh] max-w-6xl shadow-2xl animate-in fade-in zoom-in-95 duration-200 flex flex-col overflow-hidden">
+            <div className="flex flex-col md:flex-row gap-4 md:gap-0 justify-between items-center px-6 py-4 border-b border-slate-200 dark:border-slate-800 shrink-0">
+                <div className="flex flex-wrap items-center gap-4 w-full md:w-auto overflow-x-auto">
+                  <h3 className="text-xl font-bold text-slate-900 dark:text-white shrink-0">Imprimer Étiquette</h3>
+                  <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-lg shrink-0">
+                    <button onClick={() => setPrintMode('pdf')} className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${printMode === 'pdf' ? 'bg-white dark:bg-slate-700 shadow-sm text-primary' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}>PDF (A4)</button>
+                    <button onClick={() => setPrintMode('fichero')} className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${printMode === 'fichero' ? 'bg-white dark:bg-slate-700 shadow-sm text-primary' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}>Thermique</button>
+                  </div>
+                </div>
+                <button onClick={() => setPrintModalBarcode(null)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 shrink-0 self-end md:self-auto ml-auto">
+                    <X className="w-5 h-5" />
+                </button>
+            </div>
+            
+            <div className="flex-1 w-full h-[calc(100%-73px)] relative bg-slate-100 dark:bg-slate-900/50 flex flex-col lg:flex-row overflow-y-auto lg:overflow-hidden">
+               {printMode === 'fichero' ? (
+                 <FicheroBatchMode barcodes={[printModalBarcode]} />
+               ) : (
+                 <div className="w-full h-full flex flex-col items-center justify-center p-8 overflow-y-auto relative">
+                    <p className="text-slate-500 mb-8 max-w-sm text-center">
+                      Le code-barres sera centré automatiquement sur la page A4 lors de l'impression physique.
+                    </p>
+                    <div id="modal-print-container" className="bg-white dark:bg-white p-12 border border-slate-300 flex flex-col items-center justify-center relative min-w-[300px] min-h-[150px] shadow-sm print:shadow-none print:border-none">
+                      <div className="flex justify-between items-start mb-4 w-[250px]">
+                        <div className="flex items-center gap-1.5">
+                          <Zap className="w-4 h-4 text-orange-500" />
+                          <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">ElectroStock</span>
+                        </div>
+                        <span className="text-[9px] font-mono text-slate-500">v2.4.0</span>
+                      </div>
+                      <div className="flex flex-col items-center justify-center w-[250px]">
+                        <BarcodeGenerator value={printModalBarcode} height={50} displayValue={false} background="transparent" width={1.8} margin={0} />
+                        <div className="text-center text-xs font-mono mt-2 tracking-[0.2em] font-bold text-slate-900">{printModalBarcode}</div>
+                      </div>
+                    </div>
+                    <div className="mt-8 no-print">
+                      <button onClick={() => window.print()} className="bg-primary hover:bg-primary/90 text-white font-bold py-3 px-8 rounded-xl shadow-lg flex items-center gap-2 transition-all">
+                        <Printer className="w-5 h-5" /> Lancer l'impression A4
+                      </button>
+                    </div>
+                 </div>
+               )}
+            </div>
           </div>
         </div>
       )}
