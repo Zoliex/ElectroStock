@@ -98,17 +98,17 @@ const parseElectronicValue = (val: string) => {
   const clean = val.replace(/\s/g, '').replace(/Ω/g, 'R').replace(/ohm/gi, 'R');
   const match = clean.match(/^(\d+\.?\d*)([kMGµmnhR]?)(H|R)?$/i);
   if (!match) return null;
-  
+
   let num = parseFloat(match[1]);
   const multiplier = match[2];
-  
-  switch(multiplier) {
+
+  switch (multiplier) {
     case 'k':
     case 'K': num *= 1000; break;
     case 'M': num *= 1000000; break;
     case 'G': num *= 1000000000; break;
     case 'm': num /= 1000; break;
-    case 'µ': 
+    case 'µ':
     case 'u':
     case 'U': num /= 1000000; break;
     case 'n':
@@ -119,36 +119,36 @@ const parseElectronicValue = (val: string) => {
 
 const getResistorBands = (value: number, bandCount: number) => {
   if (value <= 0) return [];
-  
+
   let digits: number[] = [];
   let multiplier = 0;
-  
+
   const sigDigits = bandCount === 4 ? 2 : 3;
-  
+
   let exp = Math.floor(Math.log10(value));
   exp -= (sigDigits - 1);
-  
+
   // Handle gold/silver multipliers
   if (exp < -2) exp = -2;
   if (exp > 9) exp = 9;
-  
+
   let base = Math.round(value / Math.pow(10, exp));
-  
+
   if (base >= Math.pow(10, sigDigits)) {
     base /= 10;
     exp += 1;
   }
-  
+
   const baseStr = base.toString().padStart(sigDigits, '0');
   digits = baseStr.split('').map(Number);
   multiplier = exp;
-  
+
   return [...digits, multiplier];
 };
 
 const getInductorBands = (value: number) => {
   if (value <= 0) return [];
-  
+
   // value is in µH
   if (value < 1) {
     const val = Math.round(value * 100);
@@ -171,7 +171,7 @@ const ResistorVisual = ({ value, unit, tolerance, tempCo, bandCount, svgRef }: {
   const font = "'Inter', system-ui, sans-serif";
   const toleranceColor = TOLERANCE_MAP[tolerance] || "#FFD700";
   const tempCoColor = TEMPCO_MAP[tempCo] || "#8B4513";
-  
+
   return (
     <div className="flex flex-col items-center gap-4 p-6 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-inner aspect-square justify-center">
       <span className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">Resistor</span>
@@ -228,7 +228,7 @@ const InductorVisual = ({ value, unit, tolerance, svgRef }: { value: string, uni
   const bands = numValue ? getInductorBands(numValue * 1000000) : [];
   const font = "'Inter', system-ui, sans-serif";
   const toleranceColor = TOLERANCE_MAP[tolerance] || "#C0C0C0";
-  
+
   return (
     <div className="flex flex-col items-center gap-4 p-6 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-inner aspect-square justify-center">
       <span className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">Inductor</span>
@@ -278,28 +278,38 @@ const TransistorVisual = ({ value, svgRef }: { value: string, svgRef: React.RefO
             <stop offset="0%" stopColor="#475569" />
             <stop offset="100%" stopColor="#334155" />
           </linearGradient>
-          <linearGradient id="leadGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+          <linearGradient id="leadGradT" x1="0%" y1="0%" x2="100%" y2="0%">
             <stop offset="0%" stopColor="#94a3b8" />
             <stop offset="50%" stopColor="#f8fafc" />
             <stop offset="100%" stopColor="#94a3b8" />
           </linearGradient>
+          <radialGradient id="transShine" cx="30%" cy="20%" r="60%">
+            <stop offset="0%" stopColor="#64748b" stopOpacity="0.6" />
+            <stop offset="100%" stopColor="#0f172a" stopOpacity="0" />
+          </radialGradient>
         </defs>
-        <rect width="100%" height="100%" fill="white"/>
+        <rect width="100%" height="100%" fill="white" />
         <text x="120" y="30" textAnchor="middle" fontFamily={font} fontSize="14" fontWeight="900" fill="#94a3b8" style={{ letterSpacing: '0.3em' }}>TRANSISTOR</text>
-        
+
         {/* Leads */}
-        <rect x="86" y="140" width="8" height="80" rx="4" fill="url(#leadGrad)" />
-        <rect x="116" y="140" width="8" height="80" rx="4" fill="url(#leadGrad)" />
-        <rect x="146" y="140" width="8" height="80" rx="4" fill="url(#leadGrad)" />
-        
-        {/* Back curve */}
-        <path d="M 60 90 C 60 40, 180 40, 180 90 Z" fill="url(#transTop)" />
-        
-        {/* Front face */}
-        <rect x="60" y="90" width="120" height="70" rx="8" fill="url(#transBody)" />
-        
+        <rect x="86" y="148" width="8" height="72" rx="4" fill="url(#leadGradT)" />
+        <rect x="116" y="148" width="8" height="72" rx="4" fill="url(#leadGradT)" />
+        <rect x="146" y="148" width="8" height="72" rx="4" fill="url(#leadGradT)" />
+
+        {/* Cylinder back arc */}
+        <path d="M 60 90 C 60 42, 180 42, 180 90 Z" fill="url(#transTop)" />
+
+        {/* Main body cylinder */}
+        <path d="M 60 90 H 180 V 150 Q 180 160 170 160 H 70 Q 60 160 60 150 Z" fill="url(#transBody)" />
+
+        {/* Shine overlay */}
+        <path d="M 60 90 H 180 V 150 Q 180 160 170 160 H 70 Q 60 160 60 150 Z" fill="url(#transShine)" />
+
+        {/* Bottom ellipse */}
+        <ellipse cx="120" cy="160" rx="60" ry="8" fill="#0f172a" />
+
         {/* Text */}
-        <text x="120" y="130" textAnchor="middle" fontFamily={font} fontSize="22" fontWeight="700" fill="#cbd5e1" letterSpacing="1">{value || "2N3904"}</text>
+        <text x="120" y="132" textAnchor="middle" fontFamily={font} fontSize="20" fontWeight="700" fill="#e2e8f0" letterSpacing="1">{value || "2N3904"}</text>
       </svg>
       <span className="text-xl font-black text-slate-900 dark:text-white tracking-tight">{value || "Transistor"}</span>
     </div>
@@ -308,7 +318,7 @@ const TransistorVisual = ({ value, svgRef }: { value: string, svgRef: React.RefO
 
 const CapacitorVisual = ({ value, unit, type, svgRef }: { value: string, unit: string, type: string, svgRef: React.RefObject<SVGSVGElement | null> }) => {
   const font = "'Inter', system-ui, sans-serif";
-  
+
   let capContent = null;
   if (type === 'Electrolytic') {
     capContent = (
@@ -334,15 +344,15 @@ const CapacitorVisual = ({ value, unit, type, svgRef }: { value: string, unit: s
             <stop offset="100%" stopColor="#94a3b8" />
           </linearGradient>
         </defs>
-        <rect width="100%" height="100%" fill="white"/>
+        <rect width="100%" height="100%" fill="white" />
         <text x="120" y="30" textAnchor="middle" fontFamily={font} fontSize="14" fontWeight="900" fill="#94a3b8" style={{ letterSpacing: '0.3em' }}>ELECTROLYTIC</text>
-        
+
         <rect x="96" y="170" width="8" height="50" rx="4" fill="url(#leadGrad)" />
         <rect x="136" y="170" width="8" height="50" rx="4" fill="url(#leadGrad)" />
         <path d="M 60 70 L 60 170 A 60 15 0 0 0 180 170 L 180 70 Z" fill="url(#elecBody)" />
         <path d="M 60 70 L 60 170 A 60 15 0 0 0 85 174 L 85 74 A 60 15 0 0 1 60 70 Z" fill="url(#elecStripe)" />
         <ellipse cx="120" cy="70" rx="60" ry="15" fill="url(#elecTop)" />
-        <text x="135" y="130" textAnchor="middle" fontFamily={font} fontSize="24" fontWeight="700" fill="#f8fafc">{value}{unit}</text>
+        <text x="120" y="130" textAnchor="middle" fontFamily={font} fontSize="24" fontWeight="700" fill="#f8fafc">{value}{unit}</text>
       </>
     );
   } else if (type === 'Ceramic') {
@@ -395,7 +405,7 @@ const CapacitorVisual = ({ value, unit, type, svgRef }: { value: string, unit: s
     <div className="flex flex-col items-center gap-4 p-6 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-inner aspect-square justify-center">
       <span className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">Capacitor</span>
       <svg ref={svgRef} width="240" height="240" viewBox="0 0 240 240" className="drop-shadow-md">
-        <rect width="100%" height="100%" fill="white"/>
+        <rect width="100%" height="100%" fill="white" />
         <text x="120" y="30" textAnchor="middle" fontFamily={font} fontSize="14" fontWeight="900" fill="#94a3b8" style={{ letterSpacing: '0.3em' }}>CAPACITOR</text>
         {capContent}
       </svg>
@@ -411,7 +421,7 @@ export function AddComponent() {
   const cloneId = searchParams.get("clone");
   const isEditMode = !!id;
   const isCloneMode = !!cloneId;
-  
+
   const [barcodes, setBarcodes] = useState<string[]>([]);
   const [barcodeInput, setBarcodeInput] = useState("");
   const [showScanner, setShowScanner] = useState(false);
@@ -440,6 +450,7 @@ export function AddComponent() {
   const [transistorUnit, setTransistorUnit] = useState("");
   const [capacitorUnit, setCapacitorUnit] = useState("µF");
   const [isBatchMode, setIsBatchMode] = useState(false);
+
   const generateRandomBarcode = () => {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
     let result = '';
@@ -539,7 +550,7 @@ export function AddComponent() {
   const removeBarcode = (codeToRemove: string) => {
     setBarcodes(barcodes.filter(b => b !== codeToRemove));
   };
-  
+
   // Options State
   const [categories, setCategories] = useState<ComponentType[]>([]);
   const [packages, setPackages] = useState<ComponentPackage[]>([]);
@@ -562,6 +573,10 @@ export function AddComponent() {
   // Existing Files State (for Edit Mode)
   const [existingMainImage, setExistingMainImage] = useState<string | null>(null);
   const [existingDatasheet, setExistingDatasheet] = useState<string | null>(null);
+  const [existingAdditionalImages, setExistingAdditionalImages] = useState<string[]>([]);
+  const [existingAdditionalFiles, setExistingAdditionalFiles] = useState<string[]>([]);
+  const [removedExistingImages, setRemovedExistingImages] = useState<string[]>([]);
+  const [removedExistingFiles, setRemovedExistingFiles] = useState<string[]>([]);
 
   useEffect(() => {
     const fetchOptions = async () => {
@@ -571,7 +586,7 @@ export function AddComponent() {
           directus.request(readItems('components_packages')),
           directus.request(readItems('boxes'))
         ]);
-        
+
         setCategories(fetchedCategories);
         setPackages(fetchedPackages);
         setLocations(fetchedLocations);
@@ -613,7 +628,7 @@ export function AddComponent() {
     const fetchComponent = async () => {
       try {
         const component = await directus.request(readItem('components', Number(fetchId), {
-          fields: ['*', 'type.*', 'package.*', 'location.*'] as any
+          fields: ['*', 'type.*', 'package.*', 'location.*', 'other_images.*', 'other_files.*'] as any
         })) as unknown as Component;
 
         setFormData({
@@ -635,11 +650,25 @@ export function AddComponent() {
         } else {
           setBarcodes([]);
         }
-        
+
         // For clones, we can reuse existing images if we want, OR we can force re-upload.
         // Reusing existing images is better UX.
         setExistingMainImage(component.main_image as string);
         setExistingDatasheet(component.datasheet as string);
+
+        // Load existing additional images and files (edit mode)
+        if (component.other_images && Array.isArray(component.other_images)) {
+          const imgIds = component.other_images
+            .filter((f: any) => f.directus_files_id)
+            .map((f: any) => typeof f.directus_files_id === 'object' ? f.directus_files_id.id : f.directus_files_id);
+          if (!isCloneMode) setExistingAdditionalImages(imgIds);
+        }
+        if (component.other_files && Array.isArray(component.other_files)) {
+          const fileIds = component.other_files
+            .filter((f: any) => f.directus_files_id)
+            .map((f: any) => typeof f.directus_files_id === 'object' ? f.directus_files_id.id : f.directus_files_id);
+          if (!isCloneMode) setExistingAdditionalFiles(fileIds);
+        }
 
       } catch (error) {
         console.error("Error fetching component:", error);
@@ -714,7 +743,7 @@ export function AddComponent() {
   const [showPackageModal, setShowPackageModal] = useState(false);
   const [editingCategory, setEditingCategory] = useState<ComponentType | null>(null);
   const [editingPackage, setEditingPackage] = useState<ComponentPackage | null>(null);
-  
+
   // Modal Form States
   const [modalName, setModalName] = useState("");
   const [modalSubcategory, setModalSubcategory] = useState("");
@@ -746,7 +775,7 @@ export function AddComponent() {
 
   const handleSaveCategory = async () => {
     if (!modalName.trim()) return;
-    
+
     // Check for duplicates
     if (!editingCategory) {
       const exists = categories.some(c => c.name.toLowerCase() === modalName.trim().toLowerCase());
@@ -825,13 +854,13 @@ export function AddComponent() {
       const searchResponse = await fetch(`/api/search-images?q=${encodeURIComponent(formData.name)}`);
       if (!searchResponse.ok) throw new Error("Failed to search component");
       const searchResults = await searchResponse.json();
-      
+
       const context = searchResults.slice(0, 5).map((r: any) => r.title).join("\n");
 
       // 2. Use our backend to fill fields
       const categoriesInfo = categories.map(c => `${c.name} (Subcategories: ${c.subcategory || 'none'})`).join("; ");
       const packagesInfo = packages.map(p => p.name).join(", ");
-      
+
       const aiResponse = await fetch("/api/ai-research", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -845,15 +874,15 @@ export function AddComponent() {
 
       if (!aiResponse.ok) throw new Error("Failed to get AI research");
       const data = await aiResponse.json();
-      
+
       // Try to match category and package from existing options
-      const matchedCategory = categories.find(c => 
-        c.name.toLowerCase().includes(data.category.toLowerCase()) || 
+      const matchedCategory = categories.find(c =>
+        c.name.toLowerCase().includes(data.category.toLowerCase()) ||
         data.category.toLowerCase().includes(c.name.toLowerCase())
       );
-      
-      const matchedPackage = packages.find(p => 
-        p.name.toLowerCase().includes(data.package.toLowerCase()) || 
+
+      const matchedPackage = packages.find(p =>
+        p.name.toLowerCase().includes(data.package.toLowerCase()) ||
         data.package.toLowerCase().includes(p.name.toLowerCase())
       );
 
@@ -864,16 +893,16 @@ export function AddComponent() {
       if (!matchedCategory && data.category) {
         proposedCategory = data.category;
       }
-      
+
       if (data.subcategory) {
         if (matchedCategory && matchedCategory.subcategory) {
           const existingSubcategories = matchedCategory.subcategory.split(',').map(s => s.trim());
-          const matchedSubcat = existingSubcategories.find(s => 
+          const matchedSubcat = existingSubcategories.find(s =>
             s.toLowerCase() === data.subcategory.toLowerCase() ||
             s.toLowerCase().includes(data.subcategory.toLowerCase()) ||
             data.subcategory.toLowerCase().includes(s.toLowerCase())
           );
-          
+
           if (matchedSubcat) {
             data.subcategory = matchedSubcat;
           } else {
@@ -883,7 +912,7 @@ export function AddComponent() {
           proposedSubcategory = data.subcategory;
         }
       }
-      
+
       if (!matchedPackage && data.package) {
         proposedPackage = data.package;
       }
@@ -908,7 +937,7 @@ export function AddComponent() {
         toast.success(
           <div className="flex flex-col gap-2">
             <p>AI has filled the fields!</p>
-            <button 
+            <button
               onClick={() => setShowImageSearchModal({ type: 'main', query: formData.name })}
               className="text-[10px] font-bold uppercase tracking-wider bg-primary text-white px-2 py-1 rounded hover:bg-primary/90 transition-colors w-fit"
             >
@@ -937,7 +966,7 @@ export function AddComponent() {
         const errorData = await response.json();
         throw new Error(errorData.error || "Failed to fetch images");
       }
-      
+
       const results = await response.json();
       if (results && results.length > 0) {
         setSearchResults(results);
@@ -954,13 +983,13 @@ export function AddComponent() {
 
   const selectWebImage = async (url: string) => {
     if (!showImageSearchModal) return;
-    
+
     const toastId = toast.loading("Downloading image...");
     try {
       const response = await fetch(url);
       const blob = await response.blob();
       const file = new File([blob], "web-image.jpg", { type: blob.type });
-      
+
       if (showImageSearchModal.type === 'main') {
         setMainImage(file);
       } else if (showImageSearchModal.type === 'datasheet') {
@@ -968,7 +997,7 @@ export function AddComponent() {
       } else {
         setAdditionalImages(prev => [...prev, file]);
       }
-      
+
       setShowImageSearchModal(null);
       toast.success("Image added!", { id: toastId });
     } catch (error) {
@@ -984,7 +1013,7 @@ export function AddComponent() {
     const font = "'Inter', system-ui, sans-serif";
     const toleranceColor = TOLERANCE_MAP[tolerance] || "#FFD700";
     const tempCoColor = TEMPCO_MAP[tempCo] || "#8B4513";
-    
+
     return `
       <svg xmlns="http://www.w3.org/2000/svg" width="240" height="240" viewBox="0 0 240 240">
         <defs>
@@ -1025,14 +1054,14 @@ export function AddComponent() {
         
         <!-- Bands -->
         ${bands.map((digit, i) => {
-          const isMultiplier = i === (bandsCount === 4 ? 2 : 3);
-          const color = isMultiplier ? MULTIPLIER_MAP[digit] : COLOR_MAP[digit];
-          const x = 45 + (i * 25);
-          return `
+      const isMultiplier = i === (bandsCount === 4 ? 2 : 3);
+      const color = isMultiplier ? MULTIPLIER_MAP[digit] : COLOR_MAP[digit];
+      const x = 45 + (i * 25);
+      return `
             <rect x="${x}" y="95" width="10" height="50" fill="${color || "#E0E0E0"}" />
             <rect x="${x}" y="95" width="10" height="50" fill="white" opacity="0.1" />
           `;
-        }).join('')}
+    }).join('')}
         
         <!-- Tolerance Band -->
         <rect x="170" y="95" width="10" height="50" fill="${toleranceColor}" />
@@ -1059,7 +1088,7 @@ export function AddComponent() {
     const bands = numValue ? getInductorBands(numValue * 1000000) : [];
     const font = "'Inter', system-ui, sans-serif";
     const toleranceColor = TOLERANCE_MAP[tolerance] || "#C0C0C0";
-    
+
     return `
       <svg xmlns="http://www.w3.org/2000/svg" width="800" height="800" viewBox="0 0 240 240">
         <defs>
@@ -1089,13 +1118,13 @@ export function AddComponent() {
         
         <!-- Bands -->
         ${bands.map((digit, i) => {
-          const color = digit === -1 ? "#FFD700" : (i === 2 && bands.length === 3 ? MULTIPLIER_MAP[digit] : COLOR_MAP[digit]);
-          const x = 50 + (i * 35);
-          return `
+      const color = digit === -1 ? "#FFD700" : (i === 2 && bands.length === 3 ? MULTIPLIER_MAP[digit] : COLOR_MAP[digit]);
+      const x = 50 + (i * 35);
+      return `
             <rect x="${x}" y="95" width="12" height="50" fill="${color || "#E0E0E0"}" />
             <rect x="${x}" y="95" width="12" height="50" fill="white" opacity="0.1" />
           `;
-        }).join('')}
+    }).join('')}
         
         <!-- Tolerance Band -->
         <rect x="170" y="95" width="12" height="50" fill="${toleranceColor}" />
@@ -1127,23 +1156,33 @@ export function AddComponent() {
             <stop offset="50%" stop-color="#f8fafc" />
             <stop offset="100%" stop-color="#94a3b8" />
           </linearGradient>
+          <radialGradient id="transShine" cx="30%" cy="20%" r="60%">
+            <stop offset="0%" stop-color="#64748b" stop-opacity="0.6" />
+            <stop offset="100%" stop-color="#0f172a" stop-opacity="0" />
+          </radialGradient>
         </defs>
         <rect width="100%" height="100%" fill="white"/>
         <text x="120" y="30" text-anchor="middle" font-family="${font}" font-size="14" font-weight="900" fill="#94a3b8" style="letter-spacing: 0.3em">TRANSISTOR</text>
         
         <!-- Leads -->
-        <rect x="86" y="140" width="8" height="80" rx="4" fill="url(#leadGrad)" />
-        <rect x="116" y="140" width="8" height="80" rx="4" fill="url(#leadGrad)" />
-        <rect x="146" y="140" width="8" height="80" rx="4" fill="url(#leadGrad)" />
+        <rect x="86" y="148" width="8" height="72" rx="4" fill="url(#leadGrad)" />
+        <rect x="116" y="148" width="8" height="72" rx="4" fill="url(#leadGrad)" />
+        <rect x="146" y="148" width="8" height="72" rx="4" fill="url(#leadGrad)" />
         
-        <!-- Back curve -->
-        <path d="M 60 90 C 60 40, 180 40, 180 90 Z" fill="url(#transTop)" />
+        <!-- Cylinder back arc -->
+        <path d="M 60 90 C 60 42, 180 42, 180 90 Z" fill="url(#transTop)" />
         
-        <!-- Front face -->
-        <path d="M 60 90 H 180 V 152 Q 180 160 172 160 H 68 Q 60 160 60 152 Z" fill="url(#transBody)" />
+        <!-- Main body cylinder -->
+        <path d="M 60 90 H 180 V 150 Q 180 160 170 160 H 70 Q 60 160 60 150 Z" fill="url(#transBody)" />
+        
+        <!-- Shine overlay -->
+        <path d="M 60 90 H 180 V 150 Q 180 160 170 160 H 70 Q 60 160 60 150 Z" fill="url(#transShine)" />
+        
+        <!-- Bottom ellipse -->
+        <ellipse cx="120" cy="160" rx="60" ry="8" fill="#0f172a" />
         
         <!-- Text -->
-        <text x="120" y="130" text-anchor="middle" font-family="${font}" font-size="22" font-weight="700" fill="#cbd5e1" letter-spacing="1">${value || "2N3904"}</text>
+        <text x="120" y="132" text-anchor="middle" font-family="${font}" font-size="20" font-weight="700" fill="#e2e8f0" letter-spacing="1">${value || "2N3904"}</text>
       </svg>
     `;
   };
@@ -1183,7 +1222,7 @@ export function AddComponent() {
         <path d="M 60 70 L 60 170 A 60 15 0 0 0 180 170 L 180 70 Z" fill="url(#elecBody)" />
         <path d="M 60 70 L 60 170 A 60 15 0 0 0 85 174 L 85 74 A 60 15 0 0 1 60 70 Z" fill="url(#elecStripe)" />
         <ellipse cx="120" cy="70" rx="60" ry="15" fill="url(#elecTop)" />
-        <text x="135" y="130" text-anchor="middle" font-family="${font}" font-size="24" font-weight="700" fill="#f8fafc">${value}${unit}</text>
+        <text x="120" y="130" text-anchor="middle" font-family="${font}" font-size="24" font-weight="700" fill="#f8fafc">${value}${unit}</text>
       `;
     } else if (type === 'Ceramic') {
       capContent = `
@@ -1239,11 +1278,11 @@ export function AddComponent() {
   const svgStringToBlob = (svgString: string): Promise<Blob> => {
     return new Promise((resolve, reject) => {
       const img = new Image();
-      const svg = new Blob([svgString], {type: 'image/svg+xml;charset=utf-8'});
+      const svg = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
       const url = URL.createObjectURL(svg);
       const canvas = document.createElement("canvas");
       const ctx = canvas.getContext("2d");
-      
+
       img.onload = () => {
         canvas.width = 800;
         canvas.height = 800;
@@ -1281,14 +1320,14 @@ export function AddComponent() {
     setIsSaving(true);
     const toastId = toast.loading(isEditMode ? "Updating component..." : "Saving component...");
     try {
-      const itemsToSave = isBatchMode 
+      const itemsToSave = isBatchMode
         ? batchItems.filter(i => i.value.trim())
-        : [{ 
-            value: isResistor ? resistorValue : (isInductor ? inductanceValue : (isTransistor ? transistorValue : (isCapacitor ? capacitorValue : ""))), 
-            quantity: Number(formData.quantity),
-            unit: isResistor ? resistorUnit : (isInductor ? inductorUnit : (isTransistor ? "" : (isCapacitor ? capacitorUnit : ""))),
-            type: isCapacitor ? capacitorType : undefined
-          }];
+        : [{
+          value: isResistor ? resistorValue : (isInductor ? inductanceValue : (isTransistor ? transistorValue : (isCapacitor ? capacitorValue : ""))),
+          quantity: Number(formData.quantity),
+          unit: isResistor ? resistorUnit : (isInductor ? inductorUnit : (isTransistor ? "" : (isCapacitor ? capacitorUnit : ""))),
+          type: isCapacitor ? capacitorType : undefined
+        }];
 
       if (itemsToSave.length === 0) {
         throw new Error("No items to save. Please add at least one value.");
@@ -1348,17 +1387,17 @@ export function AddComponent() {
         // 1. Generate and Upload Procedural Image if needed (this must be per item as values differ)
         if (isProcedural) {
           const itemUnit = (item as any).unit || (isResistor ? resistorUnit : (isInductor ? inductorUnit : ""));
-          const svgString = isResistor 
-            ? getResistorSvgString(item.value, itemUnit, tolerance, tempCo, bandCount) 
-            : (isInductor 
-                ? getInductorSvgString(item.value, itemUnit, tolerance)
-                : (isTransistor
-                    ? getTransistorSvgString(item.value)
-                    : getCapacitorSvgString(item.value, itemUnit, (item as any).type || capacitorType)));
-          
+          const svgString = isResistor
+            ? getResistorSvgString(item.value, itemUnit, tolerance, tempCo, bandCount)
+            : (isInductor
+              ? getInductorSvgString(item.value, itemUnit, tolerance)
+              : (isTransistor
+                ? getTransistorSvgString(item.value)
+                : getCapacitorSvgString(item.value, itemUnit, (item as any).type || capacitorType)));
+
           const blob = await svgStringToBlob(svgString);
           const file = new File([blob], `${item.value.replace(/[^a-z0-9]/gi, '_')}.png`, { type: "image/png" });
-          
+
           const imageFormData = new FormData();
           imageFormData.append('file', file);
           const imageRes = await directus.request(uploadFiles(imageFormData));
@@ -1378,7 +1417,10 @@ export function AddComponent() {
           packet_reference: formData.packetReference || null,
           package: formData.pkg && formData.pkg !== "0" ? Number(formData.pkg) : null,
           type: formData.category && formData.category !== "0" ? Number(formData.category) : null,
-          barcode: isBatchMode ? ((item as any).barcode || null) : (barcodes.length > 0 ? barcodes.join(';') : null),
+          // Global barcode (right panel) overrides per-item barcodes when set in batch mode
+          barcode: isBatchMode
+            ? (barcodes.length > 0 ? barcodes.join(';') : ((item as any).barcode || null))
+            : (barcodes.length > 0 ? barcodes.join(';') : null),
         };
 
         if (mainImageId) {
@@ -1450,8 +1492,8 @@ export function AddComponent() {
                     Progress {uploadProgress.current} / {uploadProgress.total}
                   </div>
                   <div className="w-32 h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-                    <div 
-                      className="h-full bg-primary transition-all duration-300" 
+                    <div
+                      className="h-full bg-primary transition-all duration-300"
                       style={{ width: `${(uploadProgress.current / uploadProgress.total) * 100}%` }}
                     />
                   </div>
@@ -1463,7 +1505,7 @@ export function AddComponent() {
               >
                 Cancel
               </button>
-              <button 
+              <button
                 onClick={handleSave}
                 disabled={isSaving}
                 className="flex min-w-[140px] cursor-pointer items-center justify-center rounded-xl h-10 px-5 bg-primary text-white text-sm font-semibold shadow-lg shadow-primary/20 hover:brightness-110 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
@@ -1519,7 +1561,13 @@ export function AddComponent() {
                     </button>
                     <button
                       type="button"
-                      onClick={() => setIsBatchMode(!isBatchMode)}
+                      onClick={() => {
+                        if (!isResistor && !isInductor && !isTransistor && !isCapacitor) {
+                          toast.error("Veuillez d'abord sélectionner un type de composant (Résistance, Inductance, Transistor ou Condensateur) avant d'activer le mode batch.");
+                          return;
+                        }
+                        setIsBatchMode(!isBatchMode);
+                      }}
                       className={`flex items-center justify-center gap-2 p-3 rounded-lg border transition-all ${isBatchMode ? 'bg-orange-500 text-white border-orange-500 shadow-md' : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-800'}`}
                     >
                       <Layers className="w-4 h-4" />
@@ -1534,7 +1582,7 @@ export function AddComponent() {
                         <>
                           <div className="flex flex-col gap-2">
                             <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Band Count</label>
-                            <select 
+                            <select
                               value={bandCount}
                               onChange={(e) => setBandCount(Number(e.target.value))}
                               className={`form-select w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white h-11 px-4 text-sm ${focusClasses}`}
@@ -1546,7 +1594,7 @@ export function AddComponent() {
                           </div>
                           <div className="flex flex-col gap-2">
                             <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Tolerance</label>
-                            <select 
+                            <select
                               value={tolerance}
                               onChange={(e) => setTolerance(e.target.value)}
                               className={`form-select w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white h-11 px-4 text-sm ${focusClasses}`}
@@ -1559,7 +1607,7 @@ export function AddComponent() {
                           {bandCount === 6 && (
                             <div className="flex flex-col gap-2">
                               <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">TempCo</label>
-                              <select 
+                              <select
                                 value={tempCo}
                                 onChange={(e) => setTempCo(e.target.value)}
                                 className={`form-select w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white h-11 px-4 text-sm ${focusClasses}`}
@@ -1574,7 +1622,7 @@ export function AddComponent() {
                             <div className="flex flex-col gap-2">
                               <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Resistance Value</label>
                               <div className="flex gap-2">
-                                <input 
+                                <input
                                   value={resistorValue}
                                   onChange={(e) => setResistorValue(e.target.value)}
                                   placeholder="e.g. 4.7, 100, 1"
@@ -1598,7 +1646,7 @@ export function AddComponent() {
                         <>
                           <div className="flex flex-col gap-2">
                             <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Tolerance</label>
-                            <select 
+                            <select
                               value={tolerance}
                               onChange={(e) => setTolerance(e.target.value)}
                               className={`form-select w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white h-11 px-4 text-sm ${focusClasses}`}
@@ -1612,7 +1660,7 @@ export function AddComponent() {
                             <div className="flex flex-col gap-2">
                               <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Inductance Value</label>
                               <div className="flex gap-2">
-                                <input 
+                                <input
                                   value={inductanceValue}
                                   onChange={(e) => setInductanceValue(e.target.value)}
                                   placeholder="e.g. 10, 100, 1"
@@ -1636,8 +1684,8 @@ export function AddComponent() {
                       {isTransistor && (
                         <div className="flex flex-col gap-2">
                           <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Transistor Model</label>
-                          <input 
-                            type="text" 
+                          <input
+                            type="text"
                             value={transistorValue}
                             onChange={(e) => setTransistorValue(e.target.value)}
                             placeholder="e.g. 2N2222"
@@ -1649,7 +1697,7 @@ export function AddComponent() {
                         <>
                           <div className="flex flex-col gap-2">
                             <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Capacitor Type</label>
-                            <select 
+                            <select
                               value={capacitorType}
                               onChange={(e) => setCapacitorType(e.target.value as any)}
                               className={`form-select w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white h-11 px-4 text-sm ${focusClasses}`}
@@ -1663,14 +1711,14 @@ export function AddComponent() {
                             <div className="flex flex-col gap-2">
                               <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Capacitance Value</label>
                               <div className="flex gap-2">
-                                <input 
-                                  type="text" 
+                                <input
+                                  type="text"
                                   value={capacitorValue}
                                   onChange={(e) => setCapacitorValue(e.target.value)}
                                   placeholder="e.g. 10"
                                   className={`form-input w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white h-11 px-4 text-sm ${focusClasses}`}
                                 />
-                                <select 
+                                <select
                                   value={capacitorUnit}
                                   onChange={(e) => setCapacitorUnit(e.target.value)}
                                   className={`form-select w-24 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white h-11 px-2 text-sm ${focusClasses}`}
@@ -1684,145 +1732,151 @@ export function AddComponent() {
                           )}
                         </>
                       )}
-                    {isBatchMode && (
-                      <div className="md:col-span-2 space-y-4">
-                        <div className="flex justify-between items-center">
-                          <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Batch Items</label>
-                          <div className="flex gap-3">
-                            <button 
-                              type="button"
-                              onClick={() => {
-                                const newItems = batchItems.map(item => ({
-                                  ...item,
-                                  barcode: item.barcode || generateRandomBarcode()
-                                }));
-                                setBatchItems(newItems);
-                                toast.success("Generated barcodes for all items");
-                              }}
-                              className="flex items-center gap-1 text-xs font-bold text-slate-500 hover:text-primary transition-colors"
-                            >
-                              <RefreshCw className="w-3 h-3" /> Generate All Barcodes
-                            </button>
-                            <button 
-                              type="button"
-                              onClick={() => setBatchItems([...batchItems, { value: "", quantity: 1, unit: isResistor ? resistorUnit : (isInductor ? inductorUnit : (isTransistor ? "" : (isCapacitor ? capacitorUnit : ""))) }])}
-                              className="flex items-center gap-1 text-xs font-bold text-primary hover:underline"
-                            >
-                              <Plus className="w-3 h-3" /> Add Item
-                            </button>
-                          </div>
-                        </div>
-                        <div className="space-y-3">
-                          {batchItems.map((item, index) => (
-                            <div key={index} className="flex gap-3 items-end animate-in fade-in slide-in-from-left-2 duration-200">
-                              <div className="flex-1 flex flex-col gap-1.5">
-                                <label className="text-[10px] uppercase font-bold text-slate-400">Value</label>
-                                <div className="flex gap-1">
-                                  <input 
-                                    value={item.value}
-                                    onChange={(e) => {
-                                      const newItems = [...batchItems];
-                                      newItems[index].value = e.target.value;
-                                      setBatchItems(newItems);
-                                    }}
-                                    placeholder="e.g. 10"
-                                    className={`form-input flex-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white h-10 px-3 text-sm ${focusClasses}`}
-                                  />
-                                  {isProcedural && !isTransistor && (
-                                    <select
-                                      value={item.unit || (isResistor ? resistorUnit : (isInductor ? inductorUnit : (isCapacitor ? capacitorUnit : "")))}
-                                      onChange={(e) => {
-                                        const newItems = [...batchItems];
-                                        newItems[index].unit = e.target.value;
-                                        setBatchItems(newItems);
-                                      }}
-                                      className={`form-select w-20 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white h-10 px-1 text-xs ${focusClasses}`}
-                                    >
-                                      {isResistor ? (
-                                        <>
-                                          <option value="Ω">Ω</option>
-                                          <option value="kΩ">kΩ</option>
-                                          <option value="MΩ">MΩ</option>
-                                        </>
-                                      ) : isInductor ? (
-                                        <>
-                                          <option value="nH">nH</option>
-                                          <option value="µH">µH</option>
-                                          <option value="mH">mH</option>
-                                          <option value="H">H</option>
-                                        </>
-                                      ) : isCapacitor ? (
-                                        <>
-                                          <option value="pF">pF</option>
-                                          <option value="nF">nF</option>
-                                          <option value="µF">µF</option>
-                                        </>
-                                      ) : null}
-                                    </select>
-                                  )}
-                                </div>
-                              </div>
-                              <div className="w-20 flex flex-col gap-1.5">
-                                <label className="text-[10px] uppercase font-bold text-slate-400">Qty</label>
-                                <input 
-                                  type="number"
-                                  value={item.quantity}
-                                  onChange={(e) => {
-                                    const newItems = [...batchItems];
-                                    newItems[index].quantity = parseInt(e.target.value) || 0;
+                      {isBatchMode && (
+                        <div className="md:col-span-2 space-y-4">
+                          <div className="flex justify-between items-center">
+                            <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Batch Items</label>
+                            <div className="flex gap-3">
+                              {!barcodes.length && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const newItems = batchItems.map(item => ({
+                                      ...item,
+                                      barcode: item.barcode || generateRandomBarcode()
+                                    }));
                                     setBatchItems(newItems);
+                                    toast.success("Generated barcodes for all items");
                                   }}
-                                  className={`form-input w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white h-10 px-3 text-sm ${focusClasses}`}
-                                />
-                              </div>
-                              <div className="w-32 flex flex-col gap-1.5">
-                                <label className="text-[10px] uppercase font-bold text-slate-400">Barcode</label>
-                                <div className="relative">
-                                  <input 
-                                    value={item.barcode || ""}
-                                    onChange={(e) => {
-                                      const newItems = [...batchItems];
-                                      newItems[index].barcode = e.target.value;
-                                      setBatchItems(newItems);
-                                    }}
-                                    placeholder="SKU..."
-                                    className={`form-input w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white h-10 pl-3 pr-8 text-xs font-mono ${focusClasses}`}
-                                  />
-                                  <button 
-                                    type="button"
-                                    onClick={() => {
-                                      const newItems = [...batchItems];
-                                      newItems[index].barcode = generateRandomBarcode();
-                                      setBatchItems(newItems);
-                                    }}
-                                    className="absolute right-1 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-primary transition-colors"
-                                    title="Generate Barcode"
-                                  >
-                                    <RefreshCw className="w-3 h-3" />
-                                  </button>
-                                </div>
-                              </div>
-                              <button 
+                                  className="flex items-center gap-1 text-xs font-bold text-slate-500 hover:text-primary transition-colors"
+                                >
+                                  <RefreshCw className="w-3 h-3" /> Generate All Barcodes
+                                </button>
+                              )}
+                              <button
                                 type="button"
-                                onClick={() => setBatchItems(batchItems.filter((_, i) => i !== index))}
-                                disabled={batchItems.length === 1}
-                                className="h-10 w-10 flex items-center justify-center rounded-lg bg-red-50 text-red-500 hover:bg-red-100 disabled:opacity-30 transition-colors"
+                                onClick={() => setBatchItems([...batchItems, { value: "", quantity: 1, unit: isResistor ? resistorUnit : (isInductor ? inductorUnit : (isTransistor ? "" : (isCapacitor ? capacitorUnit : ""))) }])}
+                                className="flex items-center gap-1 text-xs font-bold text-primary hover:underline"
                               >
-                                <Trash2 className="w-4 h-4" />
+                                <Plus className="w-3 h-3" /> Add Item
                               </button>
                             </div>
-                          ))}
+                          </div>
+                          <div className="space-y-3">
+                            {batchItems.map((item, index) => (
+                              <div key={index} className="flex gap-3 items-end animate-in fade-in slide-in-from-left-2 duration-200">
+                                <div className="flex-1 flex flex-col gap-1.5">
+                                  <label className="text-[10px] uppercase font-bold text-slate-400">Value</label>
+                                  <div className="flex gap-1">
+                                    <input
+                                      value={item.value}
+                                      onChange={(e) => {
+                                        const newItems = [...batchItems];
+                                        newItems[index].value = e.target.value;
+                                        setBatchItems(newItems);
+                                      }}
+                                      placeholder="e.g. 10"
+                                      className={`form-input flex-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white h-10 px-3 text-sm ${focusClasses}`}
+                                    />
+                                    {isProcedural && !isTransistor && (
+                                      <select
+                                        value={item.unit || (isResistor ? resistorUnit : (isInductor ? inductorUnit : (isCapacitor ? capacitorUnit : "")))}
+                                        onChange={(e) => {
+                                          const newItems = [...batchItems];
+                                          newItems[index].unit = e.target.value;
+                                          setBatchItems(newItems);
+                                        }}
+                                        className={`form-select w-20 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white h-10 px-1 text-xs ${focusClasses}`}
+                                      >
+                                        {isResistor ? (
+                                          <>
+                                            <option value="Ω">Ω</option>
+                                            <option value="kΩ">kΩ</option>
+                                            <option value="MΩ">MΩ</option>
+                                          </>
+                                        ) : isInductor ? (
+                                          <>
+                                            <option value="nH">nH</option>
+                                            <option value="µH">µH</option>
+                                            <option value="mH">mH</option>
+                                            <option value="H">H</option>
+                                          </>
+                                        ) : isCapacitor ? (
+                                          <>
+                                            <option value="pF">pF</option>
+                                            <option value="nF">nF</option>
+                                            <option value="µF">µF</option>
+                                          </>
+                                        ) : null}
+                                      </select>
+                                    )}
+                                  </div>
+                                </div>
+                                <div className="w-20 flex flex-col gap-1.5">
+                                  <label className="text-[10px] uppercase font-bold text-slate-400">Qty</label>
+                                  <input
+                                    type="number"
+                                    value={item.quantity}
+                                    onChange={(e) => {
+                                      const newItems = [...batchItems];
+                                      newItems[index].quantity = parseInt(e.target.value) || 0;
+                                      setBatchItems(newItems);
+                                    }}
+                                    className={`form-input w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white h-10 px-3 text-sm ${focusClasses}`}
+                                  />
+                                </div>
+                                <div className="w-32 flex flex-col gap-1.5">
+                                  <label className="text-[10px] uppercase font-bold text-slate-400">Barcode</label>
+                                  <div className="relative">
+                                    <input
+                                      value={barcodes.length > 0 ? barcodes.join(';') : (item.barcode || "")}
+                                      onChange={(e) => {
+                                        if (barcodes.length > 0) return;
+                                        const newItems = [...batchItems];
+                                        newItems[index].barcode = e.target.value;
+                                        setBatchItems(newItems);
+                                      }}
+                                      readOnly={barcodes.length > 0}
+                                      placeholder={barcodes.length > 0 ? "Using global..." : "SKU..."}
+                                      className={`form-input w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white h-10 pl-3 pr-8 text-xs font-mono ${focusClasses} ${barcodes.length > 0 ? 'opacity-50 cursor-not-allowed bg-slate-50 dark:bg-slate-900' : ''}`}
+                                    />
+                                    {!barcodes.length && (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          const newItems = [...batchItems];
+                                          newItems[index].barcode = generateRandomBarcode();
+                                          setBatchItems(newItems);
+                                        }}
+                                        className="absolute right-1 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-primary transition-colors"
+                                        title="Generate Barcode"
+                                      >
+                                        <RefreshCw className="w-3 h-3" />
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => setBatchItems(batchItems.filter((_, i) => i !== index))}
+                                  disabled={batchItems.length === 1}
+                                  className="h-10 w-10 flex items-center justify-center rounded-lg bg-red-50 text-red-500 hover:bg-red-100 disabled:opacity-30 transition-colors"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
                         </div>
-                      </div>
-                    )}
-                  </div>
-                )}
+                      )}
+                    </div>
+                  )}
 
                   <div className="flex flex-col gap-2">
                     <div className="flex justify-between items-center">
                       <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Name <span className="text-red-500">*</span></label>
                       {settings.enableAiSuggestions && (
-                        <button 
+                        <button
                           onClick={handleAiFill}
                           disabled={isAiFilling || !formData.name.trim()}
                           className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-primary/10 text-primary hover:bg-primary hover:text-white transition-all disabled:opacity-50 disabled:hover:bg-primary/10 disabled:hover:text-primary group"
@@ -1844,7 +1898,7 @@ export function AddComponent() {
                     <div className="flex flex-col gap-2">
                       <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Category <span className="text-red-500">*</span></label>
                       <div className="flex gap-2">
-                        <select 
+                        <select
                           name="category"
                           value={formData.category}
                           onChange={handleInputChange}
@@ -1861,18 +1915,18 @@ export function AddComponent() {
                             ))
                           )}
                         </select>
-                        <button 
-                          onClick={() => openCategoryModal()} 
+                        <button
+                          onClick={() => openCategoryModal()}
                           className="flex items-center justify-center w-12 h-12 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-primary hover:text-white hover:border-primary transition-colors shrink-0"
                           title="Create New Category"
                         >
                           <Plus className="w-5 h-5" />
                         </button>
-                        <button 
+                        <button
                           onClick={() => {
                             const selected = categories.find(c => c.id === Number(formData.category));
                             if (selected) openCategoryModal(selected);
-                          }} 
+                          }}
                           disabled={!formData.category}
                           className="flex items-center justify-center w-12 h-12 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-primary hover:text-white hover:border-primary transition-colors shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
                           title="Edit Selected Category"
@@ -1884,7 +1938,7 @@ export function AddComponent() {
                     <div className="flex flex-col gap-2">
                       <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Package</label>
                       <div className="flex gap-2">
-                        <select 
+                        <select
                           name="pkg"
                           value={formData.pkg}
                           onChange={handleInputChange}
@@ -1899,18 +1953,18 @@ export function AddComponent() {
                             ))
                           )}
                         </select>
-                        <button 
-                          onClick={() => openPackageModal()} 
+                        <button
+                          onClick={() => openPackageModal()}
                           className="flex items-center justify-center w-12 h-12 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-primary hover:text-white hover:border-primary transition-colors shrink-0"
                           title="Create New Package"
                         >
                           <Plus className="w-5 h-5" />
                         </button>
-                        <button 
+                        <button
                           onClick={() => {
                             const selected = packages.find(p => p.id === Number(formData.pkg));
                             if (selected) openPackageModal(selected);
-                          }} 
+                          }}
                           disabled={!formData.pkg}
                           className="flex items-center justify-center w-12 h-12 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-primary hover:text-white hover:border-primary transition-colors shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
                           title="Edit Selected Package"
@@ -1924,13 +1978,13 @@ export function AddComponent() {
                     <div className="flex items-center justify-between">
                       <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Description <span className="text-red-500">*</span></label>
                       <div className="flex bg-slate-100 dark:bg-slate-800 rounded-lg p-1">
-                        <button 
+                        <button
                           onClick={() => setPreviewMode(false)}
                           className={`px-3 py-1 text-xs font-bold rounded-md transition-colors ${!previewMode ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
                         >
                           Write
                         </button>
-                        <button 
+                        <button
                           onClick={() => setPreviewMode(true)}
                           className={`px-3 py-1 text-xs font-bold rounded-md transition-colors ${previewMode ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
                         >
@@ -1987,13 +2041,13 @@ export function AddComponent() {
                   <Paperclip className="w-5 h-5" />
                   <h2 className="text-lg font-bold text-slate-900 dark:text-white">Assets & Documentation</h2>
                 </div>
-                
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
                   {/* Main Image */}
                   <div className="flex flex-col gap-2">
                     <div className="flex justify-between items-center">
                       <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Main Image <span className="text-red-500">*</span></label>
-                      <button 
+                      <button
                         onClick={() => setShowImageSearchModal({ type: 'main', query: formData.name })}
                         className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-primary hover:text-white transition-all border border-slate-200 dark:border-slate-700 hover:border-primary"
                       >
@@ -2002,54 +2056,54 @@ export function AddComponent() {
                       </button>
                     </div>
                     {isResistor ? (
-                      <ResistorVisual 
-                        value={isBatchMode ? "Batch Mode" : resistorValue} 
+                      <ResistorVisual
+                        value={isBatchMode ? "Batch Mode" : resistorValue}
                         unit={resistorUnit}
                         tolerance={tolerance}
                         tempCo={tempCo}
-                        bandCount={bandCount} 
-                        svgRef={resistorSvgRef} 
+                        bandCount={bandCount}
+                        svgRef={resistorSvgRef}
                       />
                     ) : isInductor ? (
-                      <InductorVisual 
-                        value={isBatchMode ? "Batch Mode" : inductanceValue} 
+                      <InductorVisual
+                        value={isBatchMode ? "Batch Mode" : inductanceValue}
                         unit={inductorUnit}
                         tolerance={tolerance}
-                        svgRef={inductorSvgRef} 
+                        svgRef={inductorSvgRef}
                       />
                     ) : isTransistor ? (
-                      <TransistorVisual 
-                        value={isBatchMode ? "Batch Mode" : transistorValue} 
-                        svgRef={transistorSvgRef} 
+                      <TransistorVisual
+                        value={isBatchMode ? "Batch Mode" : transistorValue}
+                        svgRef={transistorSvgRef}
                       />
                     ) : isCapacitor ? (
-                      <CapacitorVisual 
-                        value={isBatchMode ? "Batch Mode" : capacitorValue} 
+                      <CapacitorVisual
+                        value={isBatchMode ? "Batch Mode" : capacitorValue}
                         unit={capacitorUnit}
                         type={capacitorType}
-                        svgRef={capacitorSvgRef} 
+                        svgRef={capacitorSvgRef}
                       />
                     ) : (
-                      <div 
+                      <div
                         onClick={() => mainImageRef.current?.click()}
                         className="flex flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 p-6 hover:border-primary hover:bg-primary/5 transition-all group cursor-pointer min-h-[140px]"
                       >
                         {mainImage ? (
                           <div className="flex flex-col items-center text-primary w-full">
-                            <img 
-                              src={URL.createObjectURL(mainImage)} 
-                              alt="Main preview" 
-                              className="w-full h-32 object-contain rounded-lg mb-2" 
+                            <img
+                              src={URL.createObjectURL(mainImage)}
+                              alt="Main preview"
+                              className="w-full h-32 object-contain rounded-lg mb-2"
                             />
                             <p className="text-sm font-bold text-center truncate w-full px-4">{mainImage.name}</p>
                             <p className="text-xs opacity-70 mt-1">Click to replace</p>
                           </div>
                         ) : existingMainImage ? (
                           <div className="flex flex-col items-center text-primary w-full">
-                            <img 
-                              src={getFileUrl(existingMainImage)} 
-                              alt="Existing Main" 
-                              className="w-full h-32 object-contain rounded-lg mb-2" 
+                            <img
+                              src={getFileUrl(existingMainImage)}
+                              alt="Existing Main"
+                              className="w-full h-32 object-contain rounded-lg mb-2"
                             />
                             <p className="text-sm font-bold text-center truncate w-full px-4">Current Image</p>
                             <p className="text-xs opacity-70 mt-1">Click to replace</p>
@@ -2072,7 +2126,7 @@ export function AddComponent() {
                   <div className="flex flex-col gap-2">
                     <div className="flex justify-between items-center">
                       <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Datasheet (PDF/Image) <span className="text-red-500">*</span></label>
-                      <button 
+                      <button
                         onClick={() => setShowImageSearchModal({ type: 'datasheet', query: `${formData.name} datasheet` })}
                         className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-primary hover:text-white transition-all border border-slate-200 dark:border-slate-700 hover:border-primary"
                       >
@@ -2080,17 +2134,17 @@ export function AddComponent() {
                         <span className="text-[10px] font-bold uppercase tracking-wider">Search Web</span>
                       </button>
                     </div>
-                    <div 
+                    <div
                       onClick={() => datasheetRef.current?.click()}
                       className="flex flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 p-6 hover:border-primary hover:bg-primary/5 transition-all group cursor-pointer min-h-[140px]"
                     >
                       {datasheet ? (
                         <div className="flex flex-col items-center text-primary w-full">
                           {datasheet.type.startsWith('image/') ? (
-                            <img 
-                              src={URL.createObjectURL(datasheet)} 
-                              alt="Datasheet preview" 
-                              className="w-full h-32 object-contain rounded-lg mb-2" 
+                            <img
+                              src={URL.createObjectURL(datasheet)}
+                              alt="Datasheet preview"
+                              className="w-full h-32 object-contain rounded-lg mb-2"
                             />
                           ) : (
                             <div className="flex flex-col items-center justify-center w-full h-32 bg-red-50 dark:bg-red-900/10 rounded-lg mb-2 border border-red-100 dark:border-red-900/30">
@@ -2103,13 +2157,13 @@ export function AddComponent() {
                           <p className="text-xs opacity-70 mt-1">Click to replace</p>
                         </div>
                       ) : existingDatasheet ? (
-                         <div className="flex flex-col items-center text-primary w-full">
-                            <div className="flex flex-col items-center justify-center w-full h-32 bg-slate-100 dark:bg-slate-800 rounded-lg mb-2 border border-slate-200 dark:border-slate-700">
-                              <FileText className="w-10 h-10 text-slate-500 mb-2" />
-                              <span className="text-xs font-bold text-slate-600 dark:text-slate-400">Current Datasheet</span>
-                            </div>
-                            <p className="text-xs opacity-70 mt-1">Click to replace</p>
-                         </div>
+                        <div className="flex flex-col items-center text-primary w-full">
+                          <div className="flex flex-col items-center justify-center w-full h-32 bg-slate-100 dark:bg-slate-800 rounded-lg mb-2 border border-slate-200 dark:border-slate-700">
+                            <FileText className="w-10 h-10 text-slate-500 mb-2" />
+                            <span className="text-xs font-bold text-slate-600 dark:text-slate-400">Current Datasheet</span>
+                          </div>
+                          <p className="text-xs opacity-70 mt-1">Click to replace</p>
+                        </div>
                       ) : (
                         <>
                           <FileText className="w-8 h-8 text-slate-400 group-hover:text-primary transition-colors" />
@@ -2128,7 +2182,7 @@ export function AddComponent() {
                   {/* Additional Images */}
                   <div className="flex flex-col gap-2">
                     <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Additional Images</label>
-                    <div 
+                    <div
                       onClick={() => additionalImagesRef.current?.click()}
                       className="flex flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 p-4 hover:border-primary hover:bg-primary/5 transition-all group cursor-pointer"
                     >
@@ -2139,16 +2193,50 @@ export function AddComponent() {
                       </div>
                     </div>
                     <input type="file" hidden multiple ref={additionalImagesRef} accept="image/*" onChange={(e) => handleMultipleFiles(e, setAdditionalImages)} />
-                    
+
+                    {/* Existing images from Directus (edit mode) */}
+                    {existingAdditionalImages.length > 0 && (
+                      <div className="flex flex-col gap-2 mt-1">
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Existing ({existingAdditionalImages.length})</p>
+                        <div className="flex flex-col gap-2 max-h-40 overflow-y-auto pr-1">
+                          {existingAdditionalImages.map((fileId, idx) => (
+                            <div key={fileId} className={`flex items-center justify-between bg-slate-100 dark:bg-slate-800 p-2 rounded-lg border border-slate-200 dark:border-slate-700 ${removedExistingImages.includes(fileId) ? 'opacity-40 line-through' : ''}`}>
+                              <div className="flex items-center gap-2 overflow-hidden">
+                                <img
+                                  src={getFileUrl(fileId)}
+                                  alt={`Existing ${idx}`}
+                                  className="w-8 h-8 object-cover rounded shrink-0 border border-slate-200 dark:border-slate-700"
+                                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                                />
+                                <span className="text-xs truncate text-slate-500 font-mono">{fileId.substring(0, 12)}...</span>
+                              </div>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setRemovedExistingImages(prev =>
+                                    prev.includes(fileId) ? prev.filter(x => x !== fileId) : [...prev, fileId]
+                                  );
+                                }}
+                                className={`p-1 transition-colors ${removedExistingImages.includes(fileId) ? 'text-primary' : 'text-slate-400 hover:text-red-500'}`}
+                                title={removedExistingImages.includes(fileId) ? 'Restore' : 'Remove'}
+                              >
+                                {removedExistingImages.includes(fileId) ? <RefreshCw className="w-3 h-3" /> : <X className="w-3 h-3" />}
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
                     {additionalImages.length > 0 && (
                       <div className="flex flex-col gap-2 mt-2 max-h-40 overflow-y-auto pr-1">
                         {additionalImages.map((file, idx) => (
                           <div key={idx} className="flex items-center justify-between bg-slate-100 dark:bg-slate-800 p-2 rounded-lg border border-slate-200 dark:border-slate-700">
                             <div className="flex items-center gap-2 overflow-hidden">
-                              <img 
-                                src={URL.createObjectURL(file)} 
-                                alt={`Preview ${idx}`} 
-                                className="w-8 h-8 object-cover rounded shrink-0 border border-slate-200 dark:border-slate-700" 
+                              <img
+                                src={URL.createObjectURL(file)}
+                                alt={`Preview ${idx}`}
+                                className="w-8 h-8 object-cover rounded shrink-0 border border-slate-200 dark:border-slate-700"
                               />
                               <span className="text-xs truncate">{file.name}</span>
                             </div>
@@ -2164,7 +2252,7 @@ export function AddComponent() {
                   {/* Additional Files */}
                   <div className="flex flex-col gap-2">
                     <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Additional Files</label>
-                    <div 
+                    <div
                       onClick={() => additionalFilesRef.current?.click()}
                       className="flex flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 p-4 hover:border-primary hover:bg-primary/5 transition-all group cursor-pointer"
                     >
@@ -2175,7 +2263,36 @@ export function AddComponent() {
                       </div>
                     </div>
                     <input type="file" hidden multiple ref={additionalFilesRef} onChange={(e) => handleMultipleFiles(e, setAdditionalFiles)} />
-                    
+
+                    {/* Existing files from Directus (edit mode) */}
+                    {existingAdditionalFiles.length > 0 && (
+                      <div className="flex flex-col gap-2 mt-1">
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Existing ({existingAdditionalFiles.length})</p>
+                        <div className="flex flex-col gap-2 max-h-40 overflow-y-auto pr-1">
+                          {existingAdditionalFiles.map((fileId, idx) => (
+                            <div key={fileId} className={`flex items-center justify-between bg-slate-100 dark:bg-slate-800 p-2 rounded-lg border border-slate-200 dark:border-slate-700 ${removedExistingFiles.includes(fileId) ? 'opacity-40 line-through' : ''}`}>
+                              <div className="flex items-center gap-2 overflow-hidden">
+                                <FileText className="w-4 h-4 text-slate-400 shrink-0" />
+                                <span className="text-xs truncate text-slate-500 font-mono">{fileId.substring(0, 12)}...</span>
+                              </div>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setRemovedExistingFiles(prev =>
+                                    prev.includes(fileId) ? prev.filter(x => x !== fileId) : [...prev, fileId]
+                                  );
+                                }}
+                                className={`p-1 transition-colors ${removedExistingFiles.includes(fileId) ? 'text-primary' : 'text-slate-400 hover:text-red-500'}`}
+                                title={removedExistingFiles.includes(fileId) ? 'Restore' : 'Remove'}
+                              >
+                                {removedExistingFiles.includes(fileId) ? <RefreshCw className="w-3 h-3" /> : <X className="w-3 h-3" />}
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
                     {additionalFiles.length > 0 && (
                       <div className="flex flex-col gap-2 mt-2 max-h-40 overflow-y-auto pr-1">
                         {additionalFiles.map((file, idx) => (
@@ -2269,7 +2386,20 @@ export function AddComponent() {
                     />
                   </div>
                   <div className="pt-4 border-t border-slate-200 dark:border-slate-800">
-                    <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Barcodes / SKUs</label>
+                    <div className="flex items-center justify-between">
+                      <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Barcodes / SKUs</label>
+                      {isBatchMode && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 rounded-full text-[10px] font-bold uppercase tracking-wider">
+                          <Zap className="w-2.5 h-2.5" />
+                          Override global batch
+                        </span>
+                      )}
+                    </div>
+                    {isBatchMode && barcodes.length > 0 && (
+                      <p className="text-[10px] text-orange-600 dark:text-orange-400 mt-1 font-medium">
+                        ⚠ Ces codes-barres seront appliqués à <strong>tous les composants</strong> du batch, ignorant les codes unitaires.
+                      </p>
+                    )}
                     <div className="mt-2 flex flex-col gap-4">
                       <div className="flex flex-wrap gap-2 p-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 focus-within:border-primary focus-within:ring-4 focus-within:ring-primary/20 transition-all">
                         {barcodes.map((code) => (
@@ -2293,7 +2423,7 @@ export function AddComponent() {
                             onKeyDown={handleBarcodeKeyDown}
                           />
                           <div className="absolute right-1 flex items-center gap-1">
-                            <button 
+                            <button
                               onClick={() => {
                                 const newCode = generateRandomBarcode();
                                 if (!barcodes.includes(newCode)) {
@@ -2306,7 +2436,7 @@ export function AddComponent() {
                             >
                               <RefreshCw className="w-4 h-4" />
                             </button>
-                            <button 
+                            <button
                               onClick={() => setShowScanner(true)}
                               className="p-1 text-slate-400 hover:text-primary transition-colors sm:hidden"
                               title="Scan with Camera"
@@ -2328,7 +2458,7 @@ export function AddComponent() {
                                   </div>
                                   <div className="flex items-center gap-2">
                                     <span className="text-[8px] font-mono text-slate-400 dark:text-slate-500">v2.4.0</span>
-                                    <button 
+                                    <button
                                       onClick={() => removeBarcode(code)}
                                       className="text-slate-400 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
                                       title="Remove Barcode"
@@ -2337,9 +2467,11 @@ export function AddComponent() {
                                     </button>
                                   </div>
                                 </div>
-                                
-                                <div className="w-full flex flex-col items-center justify-center bg-white dark:bg-white rounded-lg p-3 border border-slate-100 dark:border-slate-200">
-                                  <BarcodeGenerator value={code} height={40} displayValue={false} background="transparent" width={1.5} margin={0} />
+
+                                <div className="w-full flex flex-col items-center justify-center bg-white dark:bg-white rounded-lg p-3 border border-slate-100 dark:border-slate-200 overflow-hidden">
+                                  <div className="w-full flex justify-center responsive-barcode">
+                                    <BarcodeGenerator value={code} height={40} displayValue={false} background="transparent" width={1.5} margin={0} />
+                                  </div>
                                   <div className="text-center text-[10px] font-mono mt-2 tracking-[0.2em] font-bold text-slate-900">{code}</div>
                                 </div>
                               </div>
@@ -2371,7 +2503,7 @@ export function AddComponent() {
             >
               Cancel
             </button>
-            <button 
+            <button
               onClick={handleSave}
               disabled={isSaving}
               className="flex-[2] cursor-pointer items-center justify-center rounded-xl h-12 px-5 bg-primary text-white text-base font-semibold shadow-lg shadow-primary/20 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -2426,7 +2558,7 @@ export function AddComponent() {
             <p className="text-slate-500 dark:text-slate-400 text-sm mb-6">
               The AI suggested new options that don't exist in your database yet. Would you like to create them?
             </p>
-            
+
             <div className="space-y-4 mb-6">
               {aiProposal.category && (
                 <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50">
@@ -2463,7 +2595,7 @@ export function AddComponent() {
                     let newSubcat = formData.subcategory;
 
                     if (aiProposal.category) {
-                      const catRes = await directus.request(createItem('components_types', { 
+                      const catRes = await directus.request(createItem('components_types', {
                         name: aiProposal.category,
                         subcategory: aiProposal.subcategory || null
                       }));
@@ -2472,10 +2604,10 @@ export function AddComponent() {
                     } else if (aiProposal.subcategory && newCatId) {
                       const existingCat = categories.find(c => c.id.toString() === newCatId);
                       if (existingCat) {
-                        const updatedSubcategories = existingCat.subcategory 
+                        const updatedSubcategories = existingCat.subcategory
                           ? `${existingCat.subcategory}, ${aiProposal.subcategory}`
                           : aiProposal.subcategory;
-                        
+
                         const catRes = await directus.request(updateItem('components_types', existingCat.id, {
                           subcategory: updatedSubcategories
                         }));
@@ -2615,7 +2747,7 @@ export function AddComponent() {
             <div className="flex gap-2 mb-6">
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                <input 
+                <input
                   defaultValue={showImageSearchModal.query}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') handleSearchImages(e.currentTarget.value);
@@ -2624,7 +2756,7 @@ export function AddComponent() {
                   className="w-full pl-9 pr-4 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
                 />
               </div>
-              <button 
+              <button
                 onClick={() => {
                   const input = document.querySelector('input[placeholder="Search for images..."]') as HTMLInputElement;
                   handleSearchImages(input.value);
@@ -2645,16 +2777,16 @@ export function AddComponent() {
               ) : searchResults.length > 0 ? (
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                   {searchResults.map((result, idx) => (
-                    <div 
-                      key={idx} 
+                    <div
+                      key={idx}
                       onClick={() => selectWebImage(result.url)}
                       className="group relative aspect-square rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800 cursor-pointer hover:border-primary transition-all"
                     >
-                      <img 
-                        src={result.url} 
-                        alt={result.title} 
+                      <img
+                        src={result.url}
+                        alt={result.title}
                         referrerPolicy="no-referrer"
-                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" 
+                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
                       />
                       <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                         <span className="text-white text-[10px] font-bold uppercase tracking-widest bg-primary px-2 py-1 rounded">Select</span>
@@ -2675,7 +2807,7 @@ export function AddComponent() {
 
       {/* Barcode Scanner Modal */}
       {showScanner && (
-        <BarcodeScanner 
+        <BarcodeScanner
           onScan={(decodedText) => {
             if (!barcodes.includes(decodedText)) {
               setBarcodes(prev => [...prev, decodedText]);

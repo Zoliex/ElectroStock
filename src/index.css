@@ -19,3 +19,8 @@ body {
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
+
+.responsive-barcode svg {
+  max-width: 100% !important;
+  height: auto !important;
+}

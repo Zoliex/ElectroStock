@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import {
   BarcodeLabel,
   useFicheroPrinter,
@@ -100,7 +100,6 @@ export function FicheroBatchMode({ barcodes, headerComponent, generateControls }
   const [errCorr,      setErrCorr     ] = useLocalStorageState<'L'|'M'|'Q'|'H'>('fichero_errCorr', 'M');
   const [offsetX,      setOffsetX     ] = useLocalStorageState('fichero_offsetX', -3);
   const [offsetY,      setOffsetY     ] = useLocalStorageState('fichero_offsetY', -8);
-  const [displayScale, setDisplayScale] = useLocalStorageState('fichero_displayScale', 2);
   const [previewRealRotation, setPreviewRealRotation] = useLocalStorageState('fichero_previewRealRotation', false);
   const [showOffsetPreview, setShowOffsetPreview] = useLocalStorageState('fichero_showOffsetPreview', false);
 
@@ -195,11 +194,56 @@ export function FicheroBatchMode({ barcodes, headerComponent, generateControls }
     }
   }, [options, barcodes, print, isConnected, density, copies, paperType, format]);
 
-  // ── Computed display values ───────────────────────────────────────────────
+  // ── Computed display values (depend on autoScale) ──────────────────────────
   const isUpright = !previewRealRotation && !is2DFormat(format) && (rotation === 90 || rotation === 270);
+
+  // ── Auto-fit scale based on container width ───────────────────────────────
+  const previewContainerRef = useRef<HTMLDivElement>(null);
+  const [autoScale, setAutoScale] = useState(2);
+
+  useEffect(() => {
+    const container = previewContainerRef.current;
+    if (!container) return;
+    const updateScale = () => {
+      const availableWidth = container.clientWidth - 32; // minus padding
+      
+      // Rough estimate of available height on mobile vs desktop
+      // On mobile (stacked), we want the preview to fit in a reasonable portion of the viewport
+      const isMobile = window.innerWidth < 1024;
+      const availableHeight = isMobile ? (window.innerHeight * 0.5) : (window.innerHeight - 250);
+
+      // Compute natural dimensions at scale=1
+      const naturalWidth = isUpright ? labelHeightPx : PRINTHEAD_PX;
+      const naturalHeight = isUpright ? PRINTHEAD_PX : labelHeightPx;
+
+      // Width-based scale (how many fit in a row)
+      const perRow = Math.max(1, Math.floor(availableWidth / naturalWidth));
+      const sWidth = availableWidth / (naturalWidth * perRow);
+      
+      // Height-based scale (to ensure one full label row fits vertically)
+      const sHeight = availableHeight / naturalHeight;
+
+      // Use the smaller of the two scales to ensure it fits both ways
+      // We allow fluid floating point numbers for perfectly responsive fit
+      let s = Math.min(sWidth, sHeight);
+      
+      // Clamp scale between 1 and 6
+      setAutoScale(Math.min(Math.max(1, s), 6));
+    };
+    updateScale();
+    const obs = new ResizeObserver(updateScale);
+    obs.observe(container);
+    window.addEventListener('resize', updateScale);
+    return () => {
+      obs.disconnect();
+      window.removeEventListener('resize', updateScale);
+    };
+  }, [isUpright, labelHeightPx, barcodes.length]);
+
+  const displayScale = autoScale;
+
   const rawWidth = PRINTHEAD_PX * displayScale;
   const rawHeight = labelHeightPx * displayScale;
-
   const containerWidth = isUpright ? rawHeight : rawWidth;
   const containerHeight = isUpright ? rawWidth : rawHeight;
 
@@ -444,28 +488,14 @@ export function FicheroBatchMode({ barcodes, headerComponent, generateControls }
                 </>
               )}
 
-              <div className="space-y-2 border-t border-slate-200 dark:border-slate-800 pt-4">
-                <label htmlFor="display-scale" className={`${labelClass} flex justify-between`}>
-                  <span>Zoom preview</span>
-                  <span className="font-normal text-slate-500">×{displayScale}</span>
-                </label>
-                <input
-                  id="display-scale"
-                  type="range"
-                  min={2} max={8} step={1}
-                  value={displayScale}
-                  onChange={e => setDisplayScale(Number(e.target.value))}
-                  className="w-full h-1.5 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-primary"
-                />
               </div>
 
             </div>
-          </div>
         </aside>
 
         {/* ─────────── CENTER : preview ─────────── */}
-        <section className="flex-1 bg-slate-100 dark:bg-slate-900/50 p-4 lg:p-8 overflow-auto flex flex-col items-center">
-          <div className="w-full max-w-4xl flex flex-col items-center">
+        <section className="flex-1 bg-slate-100 dark:bg-slate-900/50 p-4 lg:p-8 overflow-auto flex flex-col items-center order-1 lg:order-2 min-h-[300px]">
+          <div ref={previewContainerRef} className="w-full max-w-4xl flex flex-col items-center">
             
             <div className="flex items-center justify-between mb-8 w-full">
               <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200 flex items-center gap-2">
@@ -507,7 +537,7 @@ export function FicheroBatchMode({ barcodes, headerComponent, generateControls }
         </section>
 
         {/* ─────────── RIGHT : printer ─────────── */}
-        <aside className="w-full lg:w-80 border-t lg:border-t-0 border-l border-slate-200 dark:border-slate-800 bg-white dark:bg-background-dark p-6 overflow-visible lg:overflow-y-auto shrink-0 no-print flex flex-col">
+        <aside className="w-full lg:w-80 border-t lg:border-t-0 border-l border-slate-200 dark:border-slate-800 bg-white dark:bg-background-dark p-6 overflow-visible lg:overflow-y-auto shrink-0 no-print flex flex-col order-3">
           
           <div className="mb-6 border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl shadow-sm">
             <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-4 flex items-center justify-between">
