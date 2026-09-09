@@ -428,9 +428,9 @@ export function ComponentDetails() {
                     IN STOCK
                   </span>
                 )}
-                {component.keywords && component.keywords.length > 0 && (
+                {component.keywords && (Array.isArray(component.keywords) ? component.keywords.length > 0 : typeof component.keywords === 'string' && component.keywords.trim().length > 0) && (
                   <span className="px-3 py-1 bg-primary text-white text-xs font-bold rounded-full shadow-sm">
-                    {component.keywords[0]}
+                    {Array.isArray(component.keywords) ? component.keywords[0] : (component.keywords as string).split(',')[0].trim()}
                   </span>
                 )}
               </div>
@@ -466,10 +466,10 @@ export function ComponentDetails() {
                   <p className="font-semibold">{subcategoryName}</p>
                 </div>
               )}
-              {component.keywords && component.keywords.map((keyword, idx) => (
+              {component.keywords && (Array.isArray(component.keywords) ? component.keywords : (typeof component.keywords === 'string' ? (component.keywords as string).split(',') : [])).map((keyword, idx) => (
                 <div key={idx} className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800">
                   <p className="text-xs font-bold text-slate-400 uppercase mb-1">Tag {idx + 1}</p>
-                  <p className="font-semibold">{keyword}</p>
+                  <p className="font-semibold">{typeof keyword === 'string' ? keyword.trim() : keyword}</p>
                 </div>
               ))}
             </div>
@@ -555,7 +555,7 @@ export function ComponentDetails() {
                   <p className="text-xs text-slate-500">Barcodes</p>
                   <div className="flex flex-col gap-4 mt-3 mb-3">
                     {component.barcode ? (
-                      component.barcode.split(';').filter(b => b.trim()).map((code, idx) => (
+                      (typeof component.barcode === 'string' ? component.barcode : String(component.barcode)).split(';').filter(b => b.trim()).map((code, idx) => (
                         <div key={idx} className="group relative">
                           <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col items-center justify-center gap-3 transition-all hover:shadow-md hover:border-primary/50">
                             <div className="flex justify-between items-start w-full">
@@ -592,7 +592,7 @@ export function ComponentDetails() {
             <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex flex-col gap-2">
               {component.datasheet && (
                 <a 
-                  href={getFileUrl(component.datasheet)} 
+                  href={getFileUrl(typeof component.datasheet === 'object' && component.datasheet ? (component.datasheet as any).id : component.datasheet)} 
                   target="_blank" 
                   rel="noopener noreferrer"
                   className="w-full py-3 bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 rounded-2xl font-bold flex items-center justify-center gap-2 hover:opacity-90 transition-opacity"

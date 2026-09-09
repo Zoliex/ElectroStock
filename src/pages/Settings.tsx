@@ -11,6 +11,7 @@ export function Settings() {
   });
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [theme, setTheme] = useState(localStorage.getItem("electrostock-theme") || "modern");
 
   useEffect(() => {
     fetch("/api/settings")
@@ -71,6 +72,36 @@ export function Settings() {
       </div>
 
       <div className="space-y-6">
+        {/* Appearance Settings */}
+        <section className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm">
+          <div className="p-6 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50">
+            <h2 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              <SettingsIcon className="w-5 h-5 text-indigo-500" />
+              Appearance
+            </h2>
+            <p className="text-sm text-slate-500 mt-1">Customize the look and feel of the application.</p>
+          </div>
+          <div className="p-6 space-y-4">
+            <div className="space-y-2 max-w-sm">
+              <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Theme</label>
+              <select
+                value={theme}
+                onChange={(e) => {
+                  const newTheme = e.target.value;
+                  setTheme(newTheme);
+                  localStorage.setItem("electrostock-theme", newTheme);
+                  document.documentElement.setAttribute("data-theme", newTheme);
+                }}
+                className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-4 py-2.5 text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none appearance-none"
+              >
+                <option value="modern">Modern (Default)</option>
+                <option value="retro">Retro</option>
+                <option value="neon">Neon</option>
+              </select>
+            </div>
+          </div>
+        </section>
+
         {/* Database Settings */}
         <section className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm">
           <div className="p-6 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50">

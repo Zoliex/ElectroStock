@@ -7,6 +7,12 @@
     <link rel="icon" href="/icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/icon.svg" />
     <meta name="theme-color" content="#0f172a" />
+    <script>
+      (function() {
+        var theme = localStorage.getItem('electrostock-theme') || 'modern';
+        document.documentElement.setAttribute('data-theme', theme);
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

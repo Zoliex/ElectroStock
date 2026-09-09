@@ -1,7 +1,8 @@
-import { Search, Cpu, Menu, X, ChevronDown } from "lucide-react";
+import { Search, Cpu, Menu, X, ChevronDown, Camera } from "lucide-react";
 import { Link, useLocation, useSearchParams, useNavigate } from "react-router-dom";
 import { useState, useRef, useEffect } from "react";
 import { cn } from "../lib/utils";
+import { BarcodeScanner } from "./BarcodeScanner";
 
 export function Header() {
   const location = useLocation();
@@ -10,6 +11,7 @@ export function Header() {
   const searchQuery = searchParams.get("q") || "";
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isMoreDropdownOpen, setIsMoreDropdownOpen] = useState(false);
+  const [isScannerOpen, setIsScannerOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const mainNavLinks = [
@@ -57,6 +59,11 @@ export function Header() {
         return prev;
       });
     }
+  };
+
+  const handleScan = (decodedText: string) => {
+    setIsScannerOpen(false);
+    navigate(`/inventory?q=${encodeURIComponent(decodedText)}`);
   };
 
   const isMoreActive = moreNavLinks.some(link => location.pathname === link.path);
@@ -145,7 +152,16 @@ export function Header() {
         </nav>
       </div>
       
-      <div className="flex flex-1 justify-end gap-4">
+      <div className="flex flex-1 justify-end gap-2 md:gap-4 items-center">
+        {/* Barcode scanner button for mobile */}
+        <button
+          onClick={() => setIsScannerOpen(true)}
+          className="md:hidden flex items-center justify-center p-1.5 rounded-lg bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-400 hover:text-primary transition-colors border border-slate-200 dark:border-slate-800"
+          title="Scan Barcode"
+        >
+          <Camera className="w-5 h-5" />
+        </button>
+
         <label className="flex flex-col w-full max-w-40 sm:max-w-64 relative">
           <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none">
             <Search className="text-slate-400 w-4 h-4 md:w-5 md:h-5" />
@@ -179,6 +195,13 @@ export function Header() {
             ))}
           </nav>
         </div>
+      )}
+
+      {isScannerOpen && (
+        <BarcodeScanner
+          onScan={handleScan}
+          onClose={() => setIsScannerOpen(false)}
+        />
       )}
     </header>
   );

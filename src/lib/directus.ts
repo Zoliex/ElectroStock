@@ -77,9 +77,17 @@ const loggingFetch = async (input: RequestInfo | URL, init?: RequestInit) => {
   try {
     const response = await fetch(input, init);
     console.log(`[Directus Response] ${response.status} ${url}`);
+    
+    // Dispatch error if backend is completely down (Gateway timeouts, Bad Gateway)
+    if (!response.ok && (response.status === 502 || response.status === 503 || response.status === 504)) {
+      window.dispatchEvent(new CustomEvent('directus-error'));
+    }
+    
     return response;
   } catch (error) {
     console.error(`[Directus Error] ${method} ${url}`, error);
+    // Network error (CORS, offline, DNS, server dead)
+    window.dispatchEvent(new CustomEvent('directus-error'));
     throw error;
   }
 };

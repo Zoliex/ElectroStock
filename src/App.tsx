@@ -16,11 +16,22 @@ import { AddComponent } from "./pages/AddComponent";
 import { BatchBarcodes } from "./pages/BatchBarcodes";
 import { Boxes } from "./pages/Boxes";
 import { Settings } from "./pages/Settings";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import { ServerCrash, RefreshCw } from "lucide-react";
 
 function AppContent() {
   const navigate = useNavigate();
   const location = useLocation();
+  const [isBackendDown, setIsBackendDown] = useState(false);
+
+  useEffect(() => {
+    const handleBackendError = () => {
+      setIsBackendDown(true);
+    };
+    
+    window.addEventListener('directus-error', handleBackendError);
+    return () => window.removeEventListener('directus-error', handleBackendError);
+  }, []);
 
   useEffect(() => {
     const path = location.pathname;
@@ -74,6 +85,24 @@ function AppContent() {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [navigate]);
+
+  if (isBackendDown) {
+    return (
+      <div className="relative flex h-auto min-h-screen w-full flex-col items-center justify-center bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 font-display p-6 text-center">
+        <ServerCrash className="w-20 h-20 text-red-500 mb-6" />
+        <h1 className="text-4xl font-black mb-4">Backend Inaccessible</h1>
+        <p className="text-lg text-slate-500 dark:text-slate-400 max-w-md mb-8">
+          L'application n'arrive pas à se connecter au serveur Directus. Veuillez vérifier que la base de données est bien en ligne.
+        </p>
+        <button 
+          onClick={() => window.location.reload()} 
+          className="flex items-center gap-2 px-8 py-4 bg-primary text-white font-bold rounded-xl hover:brightness-110 transition-all shadow-lg shadow-primary/20"
+        >
+          <RefreshCw className="w-5 h-5" /> Réessayer
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="relative flex h-auto min-h-screen w-full flex-col overflow-x-hidden bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 font-display transition-colors duration-300">
